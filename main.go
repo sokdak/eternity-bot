@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/sokdak/eternity-bot/pkg/environment"
 	"github.com/sokdak/eternity-bot/pkg/handler"
-	"time"
 )
 
 func main() {
@@ -23,7 +24,7 @@ func main() {
 	}
 	defer dg.Close()
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
 	for {
