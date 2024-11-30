@@ -2,10 +2,11 @@ package handler
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 func UpdateMessageWithRoles(s *discordgo.Session, guildID, channelID, messageID string) error {
@@ -31,7 +32,8 @@ func UpdateMessageWithRoles(s *discordgo.Session, guildID, channelID, messageID 
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**[⚒️ 길드원 목록 ⚒️]** (%s 기준)\n", time.Now().Format("2006-01-02 15:04:05")))
+	loc, _ := time.LoadLocation("Asia/Seoul")
+	sb.WriteString(fmt.Sprintf("**[⚒️ 길드원 목록 ⚒️]** (%s 기준)\n", time.Now().In(loc).Format("2006-01-02 15:04:05")))
 	memberCount := 0
 	for roleID, mentions := range roleMembers {
 		role, err := s.State.Role(guildID, roleID)
