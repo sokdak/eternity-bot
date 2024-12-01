@@ -30,11 +30,15 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			err := handler.UpdateMessageWithRoles(dg, environment.DiscordGuildID,
-				environment.DiscordChannelID, environment.DiscordMessageID)
-			if err != nil {
-				fmt.Println("Error updating message:", err)
-			}
+			//err := handler.UpdateMessageWithRoles(dg, environment.DiscordGuildID,
+			//	environment.DiscordChannelID, environment.DiscordMessageID)
+			//if err != nil {
+			//	fmt.Println("Error updating message:", err)
+			//}
+			//err = handler.GeneralizeUsername(dg, environment.DiscordGuildID)
+			//if err != nil {
+			//	fmt.Println("Error generalizing username:", err)
+			//}
 		}
 	}
 	return
