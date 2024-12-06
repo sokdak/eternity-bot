@@ -63,3 +63,82 @@ func UpdateMessageWithRoles(s *discordgo.Session, guildID, channelID, messageID 
 
 	return nil
 }
+
+type MemberInfo struct {
+	RoleName string
+	Level    int
+	Nickname string
+	Mention  string
+}
+
+func UpdateMessagesWithLevels(s *discordgo.Session, guildID, channelID, messageID string) error {
+	members, err := s.GuildMembers(guildID, "", 1000)
+	if err != nil {
+		return fmt.Errorf("failed to fetch guild members: %w", err)
+	}
+
+	roleList := []string{"용기사", "크루세이더", "나이트", "레인저", "저격수", "썬콜", "불독", "프리스트", "허밋", "시프마스터"}
+	roleMembers := make(map[string][]MemberInfo)
+
+	for _, member := range members {
+		for _, roleID := range member.Roles {
+			role, err := s.State.Role(guildID, roleID)
+			if err != nil {
+				return fmt.Errorf("failed to fetch role: %w", err)
+			}
+			if !slices.Contains(roleList, role.Name) {
+				continue
+			}
+			m, err := getMemberInfoFromMember(member, role.Name)
+			if err != nil {
+				return fmt.Errorf("failed to get member info: %w", err)
+			}
+			if m == nil {
+				return fmt.Errorf("member info is nil")
+			}
+			roleMembers[role.Name] = append(roleMembers[role.Name], *m)
+		}
+	}
+
+	return nil
+}
+
+func getMemberInfoFromMember(member *discordgo.Member, role string) (*MemberInfo, error) {
+	// get username
+	username := member.Nick
+
+	// check if username is already generalized
+	// if generalized, the name must be like:
+	// Lv123 (username)
+
+	// remove whitespaces
+	newUsername := strings.ReplaceAll(username, " ", "")
+
+	// remove dot
+	newUsername = strings.ReplaceAll(newUsername, ".", "")
+
+	// check if username starts with 'lv'
+	if !strings.HasPrefix(newUsername, "lv") || !strings.HasPrefix(newUsername, "Lv") ||
+		!strings.HasPrefix(newUsername, "LV") {
+		return nil, fmt.Errorf("username is not started with 'lv': %s", username)
+	}
+
+	// check if the rest of the username is the combination of digits+string
+	// possible level digit range: 1-200
+	trim1 := strings.TrimPrefix(newUsername, "lv")
+	trim2 := strings.TrimPrefix(trim1, "Lv")
+	trim3 := strings.TrimPrefix(trim2, "LV")
+	lv, nickname := extractLevelAndNickname(trim3)
+	if lv == 0 {
+		// cannot separate level and nickname
+		// do nothing, but log error
+		return nil, fmt.Errorf("cannot separate level and nickname: %s", username)
+	}
+
+	return &MemberInfo{
+		RoleName: role,
+		Level:    lv,
+		Nickname: nickname,
+		Mention:  fmt.Sprintf("<@%s>", member.User.ID),
+	}, nil
+}
