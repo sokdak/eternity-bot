@@ -63,17 +63,19 @@ func GeneralizeUsername(s *discordgo.Session, guildID string) error {
 				return err
 			}
 		} else {
+			// TODO: enable user dm with timer
 			// assume that user should set their nickname as policy
-			dmchannel, err := s.UserChannelCreate(member.User.ID)
-			if err != nil {
-				return err
-			}
-
-			_, err = s.ChannelMessageSend(dmchannel.ID,
-				fmt.Sprintf("안녕하세요. 메이플랜드 영원 길드 자동화 봇 입니다.\n길드 디스코드 내에서 서버 프로필 변경을 통해 닉네임을 인게임 레벨 닉네임으로 변경해 주세요.\n* 예시) `Lv 200 홍길동`"))
-			if err != nil {
-				return err
-			}
+			//dmchannel, err := s.UserChannelCreate(member.User.ID)
+			//if err != nil {
+			//	return err
+			//}
+			//
+			//_, err = s.ChannelMessageSend(dmchannel.ID,
+			//	fmt.Sprintf("안녕하세요. 메이플랜드 영원 길드 자동화 봇 입니다.\n길드 디스코드 내에서 서버 프로필 변경을 통해 닉네임을 인게임 레벨 닉네임으로 변경해 주세요.\n* 예시) `Lv 200 홍길동`"))
+			//if err != nil {
+			//	return err
+			//}
+			fmt.Printf("Cannot generalize name; Nickname is not started with 'lv': %s\n", username)
 		}
 	}
 	return nil
