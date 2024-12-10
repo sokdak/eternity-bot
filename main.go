@@ -1,15 +1,28 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"github.com/dstotijn/go-notion"
+	"github.com/sokdak/eternity-bot/pkg/handler"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/sokdak/eternity-bot/pkg/environment"
-	"github.com/sokdak/eternity-bot/pkg/handler"
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Setup signal handling for graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
 	dg, err := discordgo.New("Bot " + environment.DiscordAPIKey)
 	if err != nil {
 		panic(err)
@@ -24,21 +37,52 @@ func main() {
 	}
 	defer dg.Close()
 
-	ticker := time.NewTicker(15 * time.Minute)
-	defer ticker.Stop()
+	veryShortTermTicker := time.NewTicker(1 * time.Second)
+	defer veryShortTermTicker.Stop()
+
+	shortTermTicker := time.NewTicker(15 * time.Minute)
+	defer shortTermTicker.Stop()
+
+	longTermTicker := time.NewTicker(168 * time.Hour)
+	defer longTermTicker.Stop()
+
+	n := notion.NewClient(environment.NotionBotAPIKey)
+	if n == nil {
+		fmt.Println("Error creating notion client")
+		return
+	}
+
+	startTime := time.Now()
 
 	for {
 		select {
-		case <-ticker.C:
-			//err := handler.UpdateMessageWithRoles(dg, environment.DiscordGuildID,
-			//	environment.DiscordChannelID, environment.DiscordMessageID)
-			//if err != nil {
-			//	fmt.Println("Error updating message:", err)
-			//}
-			//err = handler.GeneralizeUsername(dg, environment.DiscordGuildID)
-			//if err != nil {
-			//	fmt.Println("Error generalizing username:", err)
-			//}
+		case <-ctx.Done():
+			log.Println("Received context cancellation, shutting down gracefully...")
+			return
+		case <-sigCh:
+			log.Println("Received OS signal, shutting down gracefully...")
+			return
+		case <-veryShortTermTicker.C:
+			err := handler.CounselPoller(dg, n, startTime, environment.NotionCounselDBID, environment.DiscordGuildID, environment.DiscordCounselChannelID)
+			if err != nil {
+				fmt.Println("Error polling counsel:", err)
+			}
+		case <-shortTermTicker.C:
+			err := handler.UpdateMessageWithRoles(dg, environment.DiscordGuildID,
+				environment.DiscordGuildInfoChannelID, environment.DiscordGuildInfoByRoleMessageID)
+			if err != nil {
+				fmt.Println("Error updating message with roles:", err)
+			}
+			err = handler.UpdateMessagesWithLevels(dg, environment.DiscordGuildID,
+				environment.DiscordGuildInfoChannelID, environment.DiscordGuildInfoByLevelMessageID)
+			if err != nil {
+				fmt.Println("Error updating messages with levels:", err)
+			}
+		case <-longTermTicker.C:
+			err = handler.GeneralizeUsername(dg, environment.DiscordGuildID)
+			if err != nil {
+				fmt.Println("Error generalizing username:", err)
+			}
 		}
 	}
 	return
