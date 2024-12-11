@@ -58,7 +58,7 @@ type PollResult struct {
 
 func PollerInit(dg *discordgo.Session) error {
 	// setup gorm with sqlite
-	g, err := gorm.Open(sqlite.Open("poller.db"), &gorm.Config{})
+	g, err := gorm.Open(sqlite.Open(environment.SQLiteDatabasePath), &gorm.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to connect database: %w", err)
 	}
