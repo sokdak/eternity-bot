@@ -29,8 +29,16 @@ func main() {
 		panic(err)
 	}
 
-	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMembers
+	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMembers | discordgo.IntentsMessageContent |
+		discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages
 
+	if err := handler.PollerInit(dg); err != nil {
+		fmt.Println("Error initializing poller:", err)
+		return
+	}
+	defer handler.PollerFinalize()
+
+	dg.LogLevel = discordgo.LogDebug
 	err = dg.Open()
 	if err != nil {
 		fmt.Println("Error opening connection,", err)
@@ -70,6 +78,9 @@ func main() {
 			err := handler.CounselPoller(dg, n, startTime, environment.NotionCounselDBID, environment.DiscordGuildID, environment.DiscordCounselChannelID)
 			if err != nil {
 				fmt.Println("Error polling counsel:", err)
+			}
+			if err := handler.PollFinishChecker(dg); err != nil {
+				fmt.Println("Error checking poll finish:", err)
 			}
 		case <-shortTermTicker.C:
 			err := handler.UpdateMessageWithRoles(dg,
