@@ -123,13 +123,6 @@ func userDMPollHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
-		// parse to int
-		valueIndex, err := strconv.Atoi(args[1])
-		if err != nil {
-			sendMessage(s, m.Author.ID, "응답 번호가 올바르지 않습니다.")
-			return
-		}
-
 		// check if the pollresult is already created
 		var poll PollResult
 		err = db.Where(&PollResult{PollID: uint(pollID), DiscordUserID: m.Author.ID}).First(&poll).Error
@@ -162,7 +155,8 @@ func userDMPollHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		// check if valueIndex is valid
-		if valueIndex < 1 || valueIndex > len(p.Values) {
+		valueIndex, err := strconv.Atoi(args[1])
+		if err != nil || (valueIndex < 1 || valueIndex > len(p.Values)) {
 			sendMessage(s, m.Author.ID, "응답 번호가 올바르지 않습니다.")
 			return
 		}
@@ -177,7 +171,7 @@ func userDMPollHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			sendMessage(s, m.Author.ID, "투표 응답 중 오류가 발생했습니다.")
 			return
 		}
-		sendMessage(s, m.Author.ID, "투표에 응답하셨습니다. 감사합니다.")
+		sendMessage(s, m.Author.ID, fmt.Sprintf("투표에 '%s' 선택지로 응답하셨습니다. 감사합니다.", p.Values[valueIndex-1]))
 	}
 }
 
@@ -423,12 +417,12 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		sendGuildMessage(s, m.ChannelID, msg)
-	} else if strings.HasPrefix(m.Content, "!투표 현황 ") {
-		argsRaw := strings.TrimPrefix(m.Content, "!투표 현황 ")
+	} else if strings.HasPrefix(m.Content, "!투표 결과 ") {
+		argsRaw := strings.TrimPrefix(m.Content, "!투표 결과 ")
 		args := parseArguments(argsRaw)
 
 		if len(args) != 1 {
-			sendGuildMessage(s, m.ChannelID, "투표 현황 명령어 사용법이 잘못되었습니다.")
+			sendGuildMessage(s, m.ChannelID, "투표 결과 명령어 사용법이 잘못되었습니다.")
 			return
 		}
 
@@ -468,6 +462,39 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			msg += fmt.Sprintf("* %s: %d\n", v, counts[v])
 		}
 		sendGuildMessage(s, m.ChannelID, msg)
+	} else if strings.HasPrefix(m.Content, "!투표 정보 ") {
+		argsRaw := strings.TrimPrefix(m.Content, "!투표 정보 ")
+		args := parseArguments(argsRaw)
+
+		if len(args) != 1 {
+			sendGuildMessage(s, m.ChannelID, "투표 정보 명령어 사용법이 잘못되었습니다.")
+			return
+		}
+
+		var poll Poll
+		if err := db.Where("title = ?", args[0]).First(&poll).Error; err != nil {
+			sendGuildMessage(s, m.ChannelID, "해당 투표를 찾을 수 없습니다.")
+			return
+		}
+
+		id := "무기명"
+		if poll.Identifiable {
+			id = "기명"
+		}
+
+		msg := fmt.Sprintf("**[투표 정보: '%s']**\n", poll.Title)
+		msg += fmt.Sprintf("* 투표 번호: %d\n", poll.ID)
+		msg += fmt.Sprintf("* 투표 대상: %s\n", strings.Join(poll.Targets, "/"))
+		msg += fmt.Sprintf("* 투표 제목: %s\n", poll.Title)
+		msg += fmt.Sprintf("* 투표 종류: %s\n", id)
+		msg += fmt.Sprintf("* 투표 기간: %d시간 (%s 까지)\n", poll.Duration,
+			poll.StartedAt.Add(time.Duration(poll.Duration)*time.Hour).Format("2006-01-02 15:04"))
+		msg += "* 투표 선택지:\n"
+		for i, value := range poll.Values {
+			msg += fmt.Sprintf("  %d. %s\n", i+1, value)
+		}
+		msg += fmt.Sprintf("---\n[투표 설명]\n%s", poll.Description)
+		sendGuildMessage(s, m.ChannelID, msg)
 	} else {
 		help := fmt.Sprintf(`
 !투표 도움말
@@ -486,13 +513,15 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
   * 투표를 시작합니다.
 * !투표 재발송 [투표 이름]
   * 투표를 다시 발송합니다.
+* !투표 정보 [투표 이름]
+  * 투표 정보를 확인합니다.
 * !투표 종료 [투표 이름]
   * 투표를 종료하고 결과를 발표합니다.
   * 기능 미구현으로 투표 강제 종료가 불가능합니다.
 * !투표 목록
   * 현재 진행 중인 투표 목록을 확인합니다.
-* !투표 현황 [투표 이름]
-  * 현재 진행 중인 투표 현황을 확인합니다.
+* !투표 결과 [투표 이름]
+  * 종료된 투표의 현황을 확인합니다.
 `)
 		sendGuildMessage(s, m.ChannelID, help)
 		return
@@ -500,71 +529,12 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func sendPolls(s *discordgo.Session, guildBotManageChannelID string, poll Poll) {
-	roleNameIdMap := map[string]string{}
-	roles, err := s.GuildRoles(environment.DiscordGuildID)
+	roleNameIdMap := cache.ListAllRoles()
+	userMap := cache.ListAllMembersNicknameMap()
+	targetDgMembers, err := filterPollTarget(poll, roleNameIdMap, userMap)
 	if err != nil {
-		sendGuildMessage(s, guildBotManageChannelID, "길드 직업 목록을 가져오는 중 오류가 발생했습니다.")
+		sendGuildMessage(s, guildBotManageChannelID, err.Error())
 		return
-	}
-	for _, role := range roles {
-		roleNameIdMap[role.Name] = role.ID
-	}
-
-	// listing all guild members
-	members, err := s.GuildMembers(environment.DiscordGuildID, "", 1000)
-	if err != nil {
-		sendGuildMessage(s, guildBotManageChannelID, "길드 멤버 목록을 가져오는 중 오류가 발생했습니다.")
-		return
-	}
-
-	// build user map
-	userMap := map[string]*discordgo.Member{}
-	for _, member := range members {
-		lv, nick := cache.ExtractLevelAndNickname(member.Nick)
-		if lv == 0 {
-			continue
-		}
-		userMap[nick] = member
-	}
-
-	targetDgMembers := map[string]*discordgo.Member{}
-	for _, target := range poll.Targets {
-		if target == "전체" {
-			for k, v := range userMap {
-				if v.User.Bot {
-					continue
-				}
-				targetDgMembers[k] = v
-			}
-			break
-		}
-
-		// check if target is a user
-		if strings.HasPrefix(target, "u_") {
-			target = strings.TrimPrefix(target, "u_")
-			if _, ok := userMap[target]; !ok {
-				sendGuildMessage(s, guildBotManageChannelID, fmt.Sprintf("'%s' 님을 찾을 수 없습니다.", target))
-				continue
-			}
-			targetDgMembers[target] = userMap[target]
-			continue
-		}
-
-		// check if target is a role
-		if _, ok := roleNameIdMap[target]; !ok {
-			sendGuildMessage(s, guildBotManageChannelID, fmt.Sprintf("'%s' 직업을 찾을 수 없습니다.", target))
-			continue
-		}
-
-		// get members by role from previously built map
-		for k, v := range userMap {
-			if v.User.Bot {
-				continue
-			}
-			if slices.Contains(v.Roles, roleNameIdMap[target]) {
-				targetDgMembers[k] = v
-			}
-		}
 	}
 
 	// filter that only not voted members
@@ -588,6 +558,25 @@ func sendPolls(s *discordgo.Session, guildBotManageChannelID string, poll Poll) 
 	if poll.Identifiable {
 		identifiableStr = "기명 (직업, 레벨, 닉네임)"
 	}
+
+	// redact the poll target if it specifies a user
+	redactedUserTargets := []string{}
+	specifiedUserCount := 0
+	for i := 0; i < len(poll.Targets); i++ {
+		if strings.HasPrefix(poll.Targets[i], "u_") {
+			specifiedUserCount++
+		} else {
+			redactedUserTargets = append(redactedUserTargets, poll.Targets[i])
+		}
+	}
+	if specifiedUserCount > 0 {
+		if len(redactedUserTargets) > 0 {
+			redactedUserTargets = append(redactedUserTargets, fmt.Sprintf("외 특정 길드원 %d명", specifiedUserCount))
+		} else {
+			redactedUserTargets = append(redactedUserTargets, fmt.Sprintf("특정 길드원 %d명", specifiedUserCount))
+		}
+	}
+
 	nicks := []string{}
 	for nickname, v := range targetDgMembers {
 		nicks = append(nicks, nickname)
@@ -595,7 +584,7 @@ func sendPolls(s *discordgo.Session, guildBotManageChannelID string, poll Poll) 
 		msg += fmt.Sprintf("안녕하세요, %s 님! 메이플랜드 영원 길드 봇 입니다.\n", nickname)
 		msg += fmt.Sprintf("길드 운영 계획에 있어 %s 님의 의견이 필요하여 투표를 요청드리게 되었습니다.\n", nickname)
 		msg += fmt.Sprintf("```* 투표 번호: %d\n", poll.ID)
-		msg += fmt.Sprintf("* 투표 대상: %s\n", strings.Join(poll.Targets, "/"))
+		msg += fmt.Sprintf("* 투표 대상: %s\n", strings.Join(redactedUserTargets, "/"))
 		msg += fmt.Sprintf("* 투표 제목: %s\n", poll.Title)
 		msg += fmt.Sprintf("* 투표 종류: %s\n", identifiableStr)
 		msg += fmt.Sprintf("* 투표 기간: %d시간 (%s 까지)\n", poll.Duration,
@@ -606,7 +595,7 @@ func sendPolls(s *discordgo.Session, guildBotManageChannelID string, poll Poll) 
 		}
 		msg += fmt.Sprintf("---\n[투표 설명]\n%s\n", poll.Description)
 		msg += "```"
-		msg += fmt.Sprintf("\n투표를 하려면 !투표 응답 [투표번호] [투표선택지] 를 입력해 주세요.\n예시) `!투표 응답 1 1`\n"+
+		msg += fmt.Sprintf("\n!투표 응답 [투표번호] [투표선택지] 를 입력하여 투표를 진행해 주세요.\n예시) `!투표 응답 1 1`\n"+
 			"\n%s 님의 소중한 의견이 길드 운영에 큰 도움이 됩니다.", nickname)
 		sendMessage(s, v.User.ID, msg)
 	}
@@ -615,6 +604,48 @@ func sendPolls(s *discordgo.Session, guildBotManageChannelID string, poll Poll) 
 	} else {
 		sendGuildMessage(s, guildBotManageChannelID, fmt.Sprintf("투표 알림이 다음 인원에게 발송되었습니다. (%d 명)", len(nicks)))
 	}
+}
+
+func filterPollTarget(poll Poll, roleNameIdMap map[string]string,
+	userMap map[string]*discordgo.Member) (map[string]*discordgo.Member, error) {
+	targetDgMembers := map[string]*discordgo.Member{}
+	for _, target := range poll.Targets {
+		if target == "전체" {
+			for k, v := range userMap {
+				if v.User.Bot {
+					continue
+				}
+				targetDgMembers[k] = v
+			}
+			break
+		}
+
+		// check if target is a user
+		if strings.HasPrefix(target, "u_") {
+			target = strings.TrimPrefix(target, "u_")
+			if _, ok := userMap[target]; !ok {
+				return nil, fmt.Errorf("'%s' 님을 찾을 수 없습니다", target)
+			}
+			targetDgMembers[target] = userMap[target]
+			continue
+		}
+
+		// check if target is a role
+		if _, ok := roleNameIdMap[target]; !ok {
+			return nil, fmt.Errorf("'%s' 직업을 찾을 수 없습니다", target)
+		}
+
+		// get members by role from previously built map
+		for k, v := range userMap {
+			if v.User.Bot {
+				continue
+			}
+			if slices.Contains(v.Roles, roleNameIdMap[target]) {
+				targetDgMembers[k] = v
+			}
+		}
+	}
+	return targetDgMembers, nil
 }
 
 func PollFinishChecker(dg *discordgo.Session) error {
@@ -641,24 +672,10 @@ func PollFinishChecker(dg *discordgo.Session) error {
 				return fmt.Errorf("failed to get poll results: %w", err)
 			}
 
-			// count results
-			counts := map[string]int{}
-			for _, r := range results {
-				counts[r.Value]++
-			}
-
 			// print results
-			msg := fmt.Sprintf("**[투표 결과: '%s']**\n", poll.Title)
-			msg += fmt.Sprintf("* 참여자: %d명\n", len(results))
-			for _, v := range poll.Values {
-				if !poll.Identifiable {
-					msg += fmt.Sprintf("* %s: %d\n", v, counts[v])
-				} else {
-					msg += fmt.Sprintf("* %s: %d (%s)\n", v, counts[v], strings.Join(getIdentifiableUsers(results, v), ", "))
-				}
+			if err := printPollResult(dg, poll, results); err != nil {
+				return fmt.Errorf("failed to print poll result: %w", err)
 			}
-
-			sendGuildMessage(dg, environment.DiscordGuildPollChannelID, msg)
 
 			// update poll
 			poll.Closed = true
@@ -669,67 +686,11 @@ func PollFinishChecker(dg *discordgo.Session) error {
 		}
 
 		// check if all members voted
-		roleNameIdMap := map[string]string{}
-		roles, err := dg.GuildRoles(environment.DiscordGuildID)
+		roleNameIdMap := cache.ListAllRoles()
+		userMap := cache.ListAllMembersNicknameMap()
+		targetDgMembers, err := filterPollTarget(poll, roleNameIdMap, userMap)
 		if err != nil {
-			return fmt.Errorf("failed to get guild roles: %w", err)
-		}
-		for _, role := range roles {
-			roleNameIdMap[role.Name] = role.ID
-		}
-
-		// listing all guild members
-		members, err := dg.GuildMembers(environment.DiscordGuildID, "", 1000)
-		if err != nil {
-			return fmt.Errorf("failed to get guild members: %w", err)
-		}
-
-		// build user map
-		userMap := map[string]*discordgo.Member{}
-		for _, member := range members {
-			lv, nick := cache.ExtractLevelAndNickname(member.Nick)
-			if lv == 0 {
-				continue
-			}
-			userMap[nick] = member
-		}
-
-		targetDgMembers := map[string]*discordgo.Member{}
-		for _, target := range poll.Targets {
-			if target == "전체" {
-				for k, v := range userMap {
-					if v.User.Bot {
-						continue
-					}
-					targetDgMembers[k] = v
-				}
-				break
-			}
-
-			// check if target is a user
-			if strings.HasPrefix(target, "u_") {
-				target = strings.TrimPrefix(target, "u_")
-				if _, ok := userMap[target]; !ok {
-					return fmt.Errorf("failed to find user: %s", target)
-				}
-				targetDgMembers[target] = userMap[target]
-				continue
-			}
-
-			// check if target is a role
-			if _, ok := roleNameIdMap[target]; !ok {
-				return fmt.Errorf("failed to find role: %s", target)
-			}
-
-			// get members by role from previously built map
-			for k, v := range userMap {
-				if v.User.Bot {
-					continue
-				}
-				if slices.Contains(v.Roles, roleNameIdMap[target]) {
-					targetDgMembers[k] = v
-				}
-			}
+			return fmt.Errorf("failed to filter poll target: %w", err)
 		}
 
 		// filter that only not voted members
@@ -759,24 +720,9 @@ func PollFinishChecker(dg *discordgo.Session) error {
 			return fmt.Errorf("failed to get poll results: %w", err)
 		}
 
-		// count results
-		counts := map[string]int{}
-		for _, r := range results {
-			counts[r.Value]++
+		if err := printPollResult(dg, poll, results); err != nil {
+			return fmt.Errorf("failed to print poll result: %w", err)
 		}
-
-		// print results
-		msg := fmt.Sprintf("**[투표 결과: '%s']**\n", poll.Title)
-		msg += fmt.Sprintf("* 참여자: %d명\n", len(results))
-		for _, v := range poll.Values {
-			if !poll.Identifiable {
-				msg += fmt.Sprintf("* %s: %d\n", v, counts[v])
-			} else {
-				msg += fmt.Sprintf("* %s: %d (%s)\n", v, counts[v], strings.Join(getIdentifiableUsers(results, v), ", "))
-			}
-		}
-
-		sendGuildMessage(dg, environment.DiscordGuildPollChannelID, msg)
 
 		// update poll
 		poll.Closed = true
@@ -786,6 +732,28 @@ func PollFinishChecker(dg *discordgo.Session) error {
 		sendGuildMessage(dg, environment.DiscordGuildPollChannelID, fmt.Sprintf("투표('%s')가 전원 투표로 조기 종료되었습니다.", poll.Title))
 	}
 
+	return nil
+}
+
+func printPollResult(dg *discordgo.Session, poll Poll, results []PollResult) error {
+	// count results
+	counts := map[string]int{}
+	for _, r := range results {
+		counts[r.Value]++
+	}
+
+	// print results
+	msg := fmt.Sprintf("**[투표 결과: '%s']**\n", poll.Title)
+	msg += fmt.Sprintf("* 참여자: %d명\n", len(results))
+	for _, v := range poll.Values {
+		if !poll.Identifiable {
+			msg += fmt.Sprintf("* %s: %d\n", v, counts[v])
+		} else {
+			msg += fmt.Sprintf("* %s: %d (%s)\n", v, counts[v], strings.Join(getIdentifiableUsers(results, v), ", "))
+		}
+	}
+
+	sendGuildMessage(dg, environment.DiscordGuildPollChannelID, msg)
 	return nil
 }
 
