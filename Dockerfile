@@ -1,4 +1,4 @@
-FROM golang:1.23 as builder
+FROM golang:1.23-alpine as builder
 
 WORKDIR /workspace
 
@@ -9,7 +9,8 @@ RUN go mod download
 COPY main.go main.go
 COPY pkg/ pkg/
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -o eternity-bot main.go
+RUN apk add --no-cache gcc musl-dev
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags='-s -w -extldflags "-static"' -a -o eternity-bot main.go
 
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
