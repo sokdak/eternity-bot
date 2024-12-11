@@ -82,48 +82,56 @@ func renewMemberMap(s *discordgo.Session) {
 
 func GetRoleID(roleName string) string {
 	roleCacheLock.Lock()
+	defer roleCacheLock.Unlock()
 	if n, ok := roleNameIDCache[roleName]; ok {
 		return n
 	}
-	roleCacheLock.Unlock()
 	return ""
 }
 
 func GetRoleNameByID(roleID string) string {
 	roleCacheLock.Lock()
+	defer roleCacheLock.Unlock()
 	for roleName, id := range roleNameIDCache {
 		if id == roleID {
-			roleCacheLock.Unlock()
 			return roleName
 		}
 	}
-	roleCacheLock.Unlock()
 	return ""
 }
 
 func ListAllRoles() map[string]string {
 	roleCacheLock.Lock()
+	defer roleCacheLock.Unlock()
 	roles := roleNameIDCache
-	roleCacheLock.Unlock()
 	return roles
 }
 
 func GetGuildMember(memberID string) *discordgo.Member {
 	memberCacheLock.Lock()
-	if member, ok := guildMembersCache[memberID]; ok {
-		return member
+	defer memberCacheLock.Unlock()
+	for _, v := range guildMembersCache {
+		if v.User.ID == memberID {
+			return v
+		}
 	}
-	memberCacheLock.Unlock()
 	return nil
 }
 
 func ListAllMembers() []*discordgo.Member {
 	memberCacheLock.Lock()
+	defer memberCacheLock.Unlock()
 	// flattening slice
 	members := []*discordgo.Member{}
 	for _, v := range guildMembersCache {
 		members = append(members, v)
 	}
-	memberCacheLock.Unlock()
+	return members
+}
+
+func ListAllMembersNicknameMap() map[string]*discordgo.Member {
+	memberCacheLock.Lock()
+	defer memberCacheLock.Unlock()
+	members := guildMembersCache
 	return members
 }
