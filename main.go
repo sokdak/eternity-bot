@@ -61,7 +61,7 @@ func main() {
 	shortTermTicker := time.NewTicker(30 * time.Minute)
 	defer shortTermTicker.Stop()
 
-	longTermTicker := time.NewTicker(168 * time.Hour)
+	longTermTicker := time.NewTicker(6 * time.Hour)
 	defer longTermTicker.Stop()
 
 	startTime := time.Now()
