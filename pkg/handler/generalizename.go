@@ -2,47 +2,18 @@ package handler
 
 import (
 	"fmt"
-	"regexp"
-	"slices"
-	"strconv"
+	"github.com/sokdak/eternity-bot/pkg/cache"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
 
 func GeneralizeUsername(s *discordgo.Session, guildID string) error {
-	members, err := s.GuildMembers(guildID, "", 1000)
-	if err != nil {
-		return err
-	}
-
+	members := cache.ListAllMembers()
 	for _, member := range members {
-		// filter user by role
-		if !IsUserGamer(s, guildID, member.Roles) {
-			continue
-		}
-
-		// get username
 		username := member.Nick
-
-		// check if username is already generalized
-		// if generalized, the name must be like:
-		// Lv123 (username)
-
-		// remove whitespaces
-		newUsername := strings.ReplaceAll(username, " ", "")
-
-		// remove dot
-		newUsername = strings.ReplaceAll(newUsername, ".", "")
-
-		// check if username starts with 'lv'
-		if strings.HasPrefix(newUsername, "lv") || strings.HasPrefix(newUsername, "Lv") || strings.HasPrefix(newUsername, "LV") {
-			// check if the rest of the username is the combination of digits+string
-			// possible level digit range: 1-200
-			trim1 := strings.TrimPrefix(newUsername, "lv")
-			trim2 := strings.TrimPrefix(trim1, "Lv")
-			trim3 := strings.TrimPrefix(trim2, "LV")
-			lv, nickname := extractLevelAndNickname(trim3)
+		if strings.HasPrefix(strings.ToLower(username), "lv") {
+			lv, nickname := cache.ExtractLevelAndNickname(username)
 			if lv == 0 {
 				// cannot separate level and nickname
 				// do nothing, but log error
@@ -51,7 +22,7 @@ func GeneralizeUsername(s *discordgo.Session, guildID string) error {
 
 			// set nickname as generalized form
 			newNickname := fmt.Sprintf("Lv %d %s", lv, nickname)
-			if strings.ToLower(newNickname) == strings.ToLower(username) {
+			if newNickname == username {
 				fmt.Printf("Nickname is already generalized: %s\n", username)
 				// do nothing
 				continue
@@ -79,41 +50,4 @@ func GeneralizeUsername(s *discordgo.Session, guildID string) error {
 		}
 	}
 	return nil
-}
-
-func IsUserGamer(s *discordgo.Session, guildID string, roles []string) bool {
-	rs, err := s.GuildRoles(guildID)
-	if err != nil {
-		return false
-	}
-
-	roleList := []string{"용기사", "크루세이더", "나이트", "레인저", "저격수", "썬콜", "불독", "프리스트", "허밋", "시프마스터"}
-	for _, r := range rs {
-		if slices.Contains(roleList, r.Name) {
-			if slices.Contains(roles, r.ID) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func extractLevelAndNickname(text string) (int, string) {
-	re := regexp.MustCompile(`^(\d{1,3})(.*)`)
-	match := re.FindStringSubmatch(text)
-	if len(match) > 0 {
-		digits := match[1]
-		nickname := match[2]
-		for i := len(digits); i > 0; i-- {
-			// try to convert the level digits and check if it's in the range
-			levelNum, err := strconv.Atoi(digits[:i])
-			if err == nil {
-				if levelNum >= 85 && levelNum <= 200 {
-					return levelNum, digits[i:] + nickname
-				}
-			}
-		}
-	}
-	// no match
-	return 0, text
 }

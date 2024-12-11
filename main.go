@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/dstotijn/go-notion"
+	"github.com/sokdak/eternity-bot/pkg/cache"
 	"github.com/sokdak/eternity-bot/pkg/handler"
 	"log"
 	"os"
@@ -37,20 +38,23 @@ func main() {
 	}
 	defer dg.Close()
 
-	veryShortTermTicker := time.NewTicker(1 * time.Second)
-	defer veryShortTermTicker.Stop()
-
-	shortTermTicker := time.NewTicker(15 * time.Minute)
-	defer shortTermTicker.Stop()
-
-	longTermTicker := time.NewTicker(168 * time.Hour)
-	defer longTermTicker.Stop()
+	// Run cache eviction policy
+	cache.RunDiscordCacheEvictionPolicy(dg, 6*time.Hour, 10*time.Minute)
 
 	n := notion.NewClient(environment.NotionBotAPIKey)
 	if n == nil {
 		fmt.Println("Error creating notion client")
 		return
 	}
+
+	veryShortTermTicker := time.NewTicker(15 * time.Second)
+	defer veryShortTermTicker.Stop()
+
+	shortTermTicker := time.NewTicker(30 * time.Minute)
+	defer shortTermTicker.Stop()
+
+	longTermTicker := time.NewTicker(168 * time.Hour)
+	defer longTermTicker.Stop()
 
 	startTime := time.Now()
 
@@ -68,12 +72,12 @@ func main() {
 				fmt.Println("Error polling counsel:", err)
 			}
 		case <-shortTermTicker.C:
-			err := handler.UpdateMessageWithRoles(dg, environment.DiscordGuildID,
+			err := handler.UpdateMessageWithRoles(dg,
 				environment.DiscordGuildInfoChannelID, environment.DiscordGuildInfoByRoleMessageID)
 			if err != nil {
 				fmt.Println("Error updating message with roles:", err)
 			}
-			err = handler.UpdateMessagesWithLevels(dg, environment.DiscordGuildID,
+			err = handler.UpdateMessagesWithLevels(dg,
 				environment.DiscordGuildInfoChannelID, environment.DiscordGuildInfoByLevelMessageID)
 			if err != nil {
 				fmt.Println("Error updating messages with levels:", err)

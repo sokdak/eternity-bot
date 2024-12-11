@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"github.com/sokdak/eternity-bot/pkg/cache"
 	"slices"
 	"sort"
 	"strings"
@@ -10,40 +11,55 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func UpdateMessageWithRoles(s *discordgo.Session, guildID, channelID, messageID string) error {
-	members, err := s.GuildMembers(guildID, "", 1000)
-	if err != nil {
-		return fmt.Errorf("failed to fetch guild members: %w", err)
-	}
+var mainRoleList = map[string][]string{
+	"전사": {
+		"크루세이더",
+		"나이트",
+		"용기사",
+	},
+	"궁수": {
+		"레인저",
+		"저격수",
+	},
+	"마법사": {
+		"썬콜",
+		"불독",
+		"프리스트",
+	},
+	"도적": {
+		"허밋",
+		"시프마스터",
+	},
+}
+
+type MemberInfo struct {
+	SubRoleName  string
+	MainRoleName string
+	Level        int
+	Nickname     string
+	Mention      string
+}
+
+func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) error {
+	members := cache.ListAllMembers()
 
 	roleList := []string{"용기사", "크루세이더", "나이트", "레인저", "저격수", "썬콜", "불독", "프리스트", "허밋", "시프마스터"}
 	roleMembers := make(map[string][]MemberInfo)
 	for _, member := range members {
 		for _, roleID := range member.Roles {
-			role, err := s.State.Role(guildID, roleID)
-			if err != nil {
-				return fmt.Errorf("failed to fetch role: %w", err)
-			}
-			if !slices.Contains(roleList, role.Name) {
+			roleName := cache.GetRoleNameByID(roleID)
+			if !slices.Contains(roleList, roleName) {
 				continue
 			}
-			m, err := getMemberInfoFromMember(member, role.Name)
+			m, err := getMemberInfoFromMember(member, roleName)
 			if err != nil {
 				return fmt.Errorf("failed to get member info: %w", err)
 			}
 			if m == nil {
 				return fmt.Errorf("member info is nil")
 			}
-			roleMembers[role.Name] = append(roleMembers[role.Name], *m)
+			roleMembers[roleName] = append(roleMembers[roleName], *m)
 		}
-	}
-
-	for roleName, ms := range roleMembers {
-		// sort by level
-		sort.Slice(ms, func(i, j int) bool {
-			return ms[i].Level > ms[j].Level
-		})
-		roleMembers[roleName] = ms
 	}
 
 	// flattening the map
@@ -66,12 +82,13 @@ func UpdateMessageWithRoles(s *discordgo.Session, guildID, channelID, messageID 
 		"허밋":    9,
 		"시프마스터": 10,
 	}
-	sort.Slice(ms, func(i, j int) bool {
-		return roleOrder[ms[i].RoleName] < roleOrder[ms[j].RoleName]
-	})
 
+	// sort by role order, then by level
+	sort.Slice(ms, func(i, j int) bool {
+		return roleOrder[ms[i].SubRoleName] < roleOrder[ms[j].SubRoleName]
+	})
 	sort.SliceStable(ms, func(i, j int) bool {
-		if roleOrder[ms[i].RoleName] == roleOrder[ms[j].RoleName] {
+		if roleOrder[ms[i].SubRoleName] == roleOrder[ms[j].SubRoleName] {
 			return ms[i].Level > ms[j].Level
 		}
 		return false
@@ -96,8 +113,8 @@ func UpdateMessageWithRoles(s *discordgo.Session, guildID, channelID, messageID 
 			subroleAverageLevel[m.MainRoleName] = make(map[string]float64)
 			subroleCount[m.MainRoleName] = make(map[string]int)
 		}
-		subroleAverageLevel[m.MainRoleName][m.RoleName] += float64(m.Level)
-		subroleCount[m.MainRoleName][m.RoleName]++
+		subroleAverageLevel[m.MainRoleName][m.SubRoleName] += float64(m.Level)
+		subroleCount[m.MainRoleName][m.SubRoleName]++
 	}
 	for k, _ := range subroleAverageLevel {
 		for kk, _ := range subroleAverageLevel[k] {
@@ -105,10 +122,12 @@ func UpdateMessageWithRoles(s *discordgo.Session, guildID, channelID, messageID 
 		}
 	}
 
-	var sb strings.Builder
 	loc, _ := time.LoadLocation("Asia/Seoul")
+
+	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("**[⚒️ 직업 별 길드원 분포 ⚒️]** (%s 기준)\n", time.Now().In(loc).Format("2006-01-02 15:04:05")))
 	memberCount := 0
+
 	// using ms instead of roleMembers
 	currentMainRole := ""
 	currentSubRole := ""
@@ -118,14 +137,14 @@ func UpdateMessageWithRoles(s *discordgo.Session, guildID, channelID, messageID 
 				sb.WriteString("\n")
 			}
 			currentMainRole = mk.MainRoleName
-			currentSubRole = mk.RoleName
+			currentSubRole = mk.SubRoleName
 
 			sb.WriteString(fmt.Sprintf("\n**%s** (%d명 / 평렙 %.1f)\n", mk.MainRoleName, mainroleCount[mk.MainRoleName], mainroleAverageLevel[mk.MainRoleName]))
-			sb.WriteString(fmt.Sprintf("- **%s** (%d명 / 평렙 %.1f): ", mk.RoleName, subroleCount[mk.MainRoleName][mk.RoleName], subroleAverageLevel[mk.MainRoleName][mk.RoleName]))
+			sb.WriteString(fmt.Sprintf("- **%s** (%d명 / 평렙 %.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
 			sb.WriteString(mk.Mention + " ")
-		} else if currentSubRole != mk.RoleName {
-			currentSubRole = mk.RoleName
-			sb.WriteString(fmt.Sprintf("\n- **%s** (%d명 / 평렙 %.1f): ", mk.RoleName, subroleCount[mk.MainRoleName][mk.RoleName], subroleAverageLevel[mk.MainRoleName][mk.RoleName]))
+		} else if currentSubRole != mk.SubRoleName {
+			currentSubRole = mk.SubRoleName
+			sb.WriteString(fmt.Sprintf("\n- **%s** (%d명 / 평렙 %.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
 			sb.WriteString(mk.Mention + " ")
 		} else {
 			sb.WriteString(mk.Mention + " ")
@@ -135,7 +154,7 @@ func UpdateMessageWithRoles(s *discordgo.Session, guildID, channelID, messageID 
 
 	sb.WriteString(fmt.Sprintf("\n\n**[총 인원: %d명]**\n", memberCount))
 
-	_, err = s.ChannelMessageEdit(channelID, messageID, sb.String())
+	_, err := s.ChannelMessageEdit(channelID, messageID, sb.String())
 	if err != nil {
 		return fmt.Errorf("failed to edit message: %w", err)
 	}
@@ -143,40 +162,25 @@ func UpdateMessageWithRoles(s *discordgo.Session, guildID, channelID, messageID 
 	return nil
 }
 
-type MemberInfo struct {
-	RoleName     string
-	MainRoleName string
-	Level        int
-	Nickname     string
-	Mention      string
-}
-
-func UpdateMessagesWithLevels(s *discordgo.Session, guildID, channelID, messageID string) error {
-	members, err := s.GuildMembers(guildID, "", 1000)
-	if err != nil {
-		return fmt.Errorf("failed to fetch guild members: %w", err)
-	}
+func UpdateMessagesWithLevels(s *discordgo.Session, channelID, messageID string) error {
+	members := cache.ListAllMembers()
 
 	roleList := []string{"용기사", "크루세이더", "나이트", "레인저", "저격수", "썬콜", "불독", "프리스트", "허밋", "시프마스터"}
 	roleMembers := make(map[string][]MemberInfo)
-
 	for _, member := range members {
 		for _, roleID := range member.Roles {
-			role, err := s.State.Role(guildID, roleID)
-			if err != nil {
-				return fmt.Errorf("failed to fetch role: %w", err)
-			}
-			if !slices.Contains(roleList, role.Name) {
+			roleName := cache.GetRoleNameByID(roleID)
+			if !slices.Contains(roleList, roleName) {
 				continue
 			}
-			m, err := getMemberInfoFromMember(member, role.Name)
+			m, err := getMemberInfoFromMember(member, roleName)
 			if err != nil {
 				return fmt.Errorf("failed to get member info: %w", err)
 			}
 			if m == nil {
 				return fmt.Errorf("member info is nil")
 			}
-			roleMembers[role.Name] = append(roleMembers[role.Name], *m)
+			roleMembers[roleName] = append(roleMembers[roleName], *m)
 		}
 	}
 
@@ -201,6 +205,21 @@ func UpdateMessagesWithLevels(s *discordgo.Session, guildID, channelID, messageI
 		levelDist[m.Level/10*10]++
 	}
 
+	// averaging level
+	avgLevel := 0.0
+	for _, m := range ms {
+		avgLevel += float64(m.Level)
+	}
+	avgLevel /= float64(len(ms))
+
+	// median level
+	medianLevel := 0
+	if len(ms)%2 == 0 {
+		medianLevel = (ms[len(ms)/2-1].Level + ms[len(ms)/2].Level) / 2
+	} else {
+		medianLevel = ms[len(ms)/2].Level
+	}
+
 	for i := 200; i > 0; i -= 10 {
 		if levelDist[i] == 0 {
 			continue
@@ -213,25 +232,9 @@ func UpdateMessagesWithLevels(s *discordgo.Session, guildID, channelID, messageI
 		}
 		sb.WriteString("\n")
 	}
+	sb.WriteString(fmt.Sprintf("\n**[평균 레벨: %.1f, 중앙값 레벨: %d]**\n", avgLevel, medianLevel))
 
-	// averaging level
-	avgLevel := 0.0
-	for _, m := range ms {
-		avgLevel += float64(m.Level)
-	}
-	avgLevel /= float64(len(ms))
-	sb.WriteString(fmt.Sprintf("\n**[평균 레벨: %.1f, ", avgLevel))
-
-	// median level
-	medianLevel := 0
-	if len(ms)%2 == 0 {
-		medianLevel = (ms[len(ms)/2-1].Level + ms[len(ms)/2].Level) / 2
-	} else {
-		medianLevel = ms[len(ms)/2].Level
-	}
-	sb.WriteString(fmt.Sprintf("중앙값 레벨: %d]**\n", medianLevel))
-
-	_, err = s.ChannelMessageEdit(channelID, messageID, sb.String())
+	_, err := s.ChannelMessageEdit(channelID, messageID, sb.String())
 	if err != nil {
 		return fmt.Errorf("failed to edit message: %w", err)
 	}
@@ -239,53 +242,10 @@ func UpdateMessagesWithLevels(s *discordgo.Session, guildID, channelID, messageI
 	return nil
 }
 
-var mainRoleList = map[string][]string{
-	"전사": {
-		"크루세이더",
-		"나이트",
-		"용기사",
-	},
-	"궁수": {
-		"레인저",
-		"저격수",
-	},
-	"마법사": {
-		"썬콜",
-		"불독",
-		"프리스트",
-	},
-	"도적": {
-		"허밋",
-		"시프마스터",
-	},
-}
-
 func getMemberInfoFromMember(member *discordgo.Member, role string) (*MemberInfo, error) {
 	// get username
 	username := member.Nick
-
-	// check if username is already generalized
-	// if generalized, the name must be like:
-	// Lv123 (username)
-
-	// remove whitespaces
-	newUsername := strings.ReplaceAll(username, " ", "")
-
-	// remove dot
-	newUsername = strings.ReplaceAll(newUsername, ".", "")
-
-	// check if username starts with 'lv'
-	if !strings.HasPrefix(newUsername, "lv") && !strings.HasPrefix(newUsername, "Lv") &&
-		!strings.HasPrefix(newUsername, "LV") {
-		return nil, fmt.Errorf("username is not started with 'lv': %s", username)
-	}
-
-	// check if the rest of the username is the combination of digits+string
-	// possible level digit range: 1-200
-	trim1 := strings.TrimPrefix(newUsername, "lv")
-	trim2 := strings.TrimPrefix(trim1, "Lv")
-	trim3 := strings.TrimPrefix(trim2, "LV")
-	lv, nickname := extractLevelAndNickname(trim3)
+	lv, nickname := cache.ExtractLevelAndNickname(username)
 	if lv == 0 {
 		// cannot separate level and nickname
 		// do nothing, but log error
@@ -302,8 +262,8 @@ func getMemberInfoFromMember(member *discordgo.Member, role string) (*MemberInfo
 	}
 
 	return &MemberInfo{
-		RoleName:     role,
 		MainRoleName: mainRole,
+		SubRoleName:  role,
 		Level:        lv,
 		Nickname:     nickname,
 		Mention:      fmt.Sprintf("<@%s>", member.User.ID),
