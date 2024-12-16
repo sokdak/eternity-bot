@@ -586,8 +586,12 @@ func sendPolls(s *discordgo.Session, guildBotManageChannelID string, poll Poll) 
 		}
 		msg += fmt.Sprintf("---\n[투표 설명]\n%s\n", poll.Description)
 		msg += "```"
-		msg += fmt.Sprintf("\n!투표 응답 [투표번호] [투표선택지] 를 입력하여 투표를 진행해 주세요.\n예시) `!투표 응답 1 1`\n"+
-			"\n%s 님의 소중한 의견이 길드 운영에 큰 도움이 됩니다.", nickname)
+		msg += fmt.Sprintf("\n!투표 응답 [투표번호] [투표선택지] 를 입력하여 투표를 진행해 주세요.\n")
+		msg += fmt.Sprintf("입력 예시:\n")
+		for i := 0; i < len(poll.Values); i++ {
+			msg += fmt.Sprintf("* `!투표 응답 %d %d`: %s\n", poll.ID, i+1, poll.Values[i])
+		}
+		msg += fmt.Sprintf("\n%s 님의 소중한 의견이 길드 운영에 큰 도움이 됩니다.", nickname)
 		sendMessage(s, v.User.ID, msg)
 	}
 	if poll.Identifiable {
