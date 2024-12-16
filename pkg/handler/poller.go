@@ -739,14 +739,50 @@ func printPollResult(dg *discordgo.Session, poll Poll, results []PollResult) err
 		counts[r.Value]++
 	}
 
+	// query users
+	pollMemberMap := getPollMemberMap(results)
+	if pollMemberMap == nil {
+		return fmt.Errorf("failed to get identifiable users")
+	}
+
+	//// remove poll members
+	//for value, members := range pollMemberMap {
+	//	v := []string{"가샤", "이잉몽실이", "전전궁붕", "o1dboy", "보라빛향기", "돔적", "머미킴", "jun두사", "느그바램", "Only뮌헨"}
+	//	filtered := make([]MemberInfo, 0, len(members))
+	//	for _, member := range members {
+	//		if !slices.Contains(v, member.Nickname) {
+	//			filtered = append(filtered, member)
+	//		}
+	//	}
+	//	pollMemberMap[value] = filtered
+	//}
+
 	// print results
 	msg := fmt.Sprintf("**[투표 결과: '%s']**\n", poll.Title)
 	msg += fmt.Sprintf("* 참여자: %d명\n", len(results))
-	for _, v := range poll.Values {
+	for _, value := range poll.Values {
 		if !poll.Identifiable {
-			msg += fmt.Sprintf("* %s: %d\n", v, counts[v])
+			statisticsMsg := ""
+			if len(pollMemberMap[value]) > 0 {
+				// sum up the main role number
+				roleCounts := map[string]int{}
+				for _, member := range pollMemberMap[value] {
+					roleCounts[member.MainRoleName]++
+				}
+				statisticsMsg += "  * 직업군 통계:"
+				for role, count := range roleCounts {
+					statisticsMsg += fmt.Sprintf(" %s(%d명)", role, count)
+				}
+			}
+			msg += fmt.Sprintf("* %s: %d\n", value, counts[value])
+			msg += fmt.Sprintf("%s\n", statisticsMsg)
 		} else {
-			msg += fmt.Sprintf("* %s: %d (%s)\n", v, counts[v], strings.Join(getIdentifiableUsers(results, v), ", "))
+			nicks := []string{}
+			for _, member := range pollMemberMap[value] {
+				nicks = append(nicks, fmt.Sprintf("%s/%s", member.Nickname, member.SubRoleName))
+			}
+			msg += fmt.Sprintf("* %s: %d", value, counts[value])
+			msg += fmt.Sprintf("  * %s\n", strings.Join(nicks, ", "))
 		}
 	}
 
@@ -754,19 +790,24 @@ func printPollResult(dg *discordgo.Session, poll Poll, results []PollResult) err
 	return nil
 }
 
-func getIdentifiableUsers(results []PollResult, v string) []string {
-	var users []string
+func getPollMemberMap(results []PollResult) map[string][]MemberInfo {
+	var valueUserMap = map[string][]MemberInfo{}
 	for _, r := range results {
-		if r.Value == v {
-			m := cache.GetGuildMember(r.DiscordUserID)
-			if m == nil {
-				fmt.Printf("not existing guild member: %s\n", r.DiscordUserID)
-				continue
-			}
-			users = append(users, m.Nick)
+		m := cache.GetGuildMember(r.DiscordUserID)
+		if m == nil {
+			fmt.Printf("not existing guild member: %s\n", r.DiscordUserID)
+			continue
 		}
+		member, err := getMemberInfoFromMember(m)
+		if err != nil {
+			return nil
+		}
+		if member == nil {
+			return nil
+		}
+		valueUserMap[r.Value] = append(valueUserMap[r.Value], *member)
 	}
-	return users
+	return valueUserMap
 }
 
 func sendMessage(dg *discordgo.Session, userID, message string) {

@@ -43,29 +43,16 @@ type MemberInfo struct {
 func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) error {
 	members := cache.ListAllMembers()
 
-	roleList := []string{"용기사", "크루세이더", "나이트", "레인저", "저격수", "썬콜", "불독", "프리스트", "허밋", "시프마스터"}
-	roleMembers := make(map[string][]MemberInfo)
-	for _, member := range members {
-		for _, roleID := range member.Roles {
-			roleName := cache.GetRoleNameByID(roleID)
-			if !slices.Contains(roleList, roleName) {
-				continue
-			}
-			m, err := getMemberInfoFromMember(member, roleName)
-			if err != nil {
-				return fmt.Errorf("failed to get member info: %w", err)
-			}
-			if m == nil {
-				return fmt.Errorf("member info is nil")
-			}
-			roleMembers[roleName] = append(roleMembers[roleName], *m)
-		}
-	}
-
-	// flattening the map
 	var ms []MemberInfo
-	for _, v := range roleMembers {
-		ms = append(ms, v...)
+	for _, member := range members {
+		m, err := getMemberInfoFromMember(member)
+		if err != nil {
+			return fmt.Errorf("failed to get member info: %w", err)
+		}
+		if m == nil {
+			return fmt.Errorf("member info is nil")
+		}
+		ms = append(ms, *m)
 	}
 
 	// sort by main role
@@ -165,29 +152,16 @@ func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) e
 func UpdateMessagesWithLevels(s *discordgo.Session, channelID, messageID string) error {
 	members := cache.ListAllMembers()
 
-	roleList := []string{"용기사", "크루세이더", "나이트", "레인저", "저격수", "썬콜", "불독", "프리스트", "허밋", "시프마스터"}
-	roleMembers := make(map[string][]MemberInfo)
-	for _, member := range members {
-		for _, roleID := range member.Roles {
-			roleName := cache.GetRoleNameByID(roleID)
-			if !slices.Contains(roleList, roleName) {
-				continue
-			}
-			m, err := getMemberInfoFromMember(member, roleName)
-			if err != nil {
-				return fmt.Errorf("failed to get member info: %w", err)
-			}
-			if m == nil {
-				return fmt.Errorf("member info is nil")
-			}
-			roleMembers[roleName] = append(roleMembers[roleName], *m)
-		}
-	}
-
-	// flattening the map
 	var ms []MemberInfo
-	for _, v := range roleMembers {
-		ms = append(ms, v...)
+	for _, member := range members {
+		m, err := getMemberInfoFromMember(member)
+		if err != nil {
+			return fmt.Errorf("failed to get member info: %w", err)
+		}
+		if m == nil {
+			return fmt.Errorf("member info is nil")
+		}
+		ms = append(ms, *m)
 	}
 
 	// sort by level
@@ -242,7 +216,7 @@ func UpdateMessagesWithLevels(s *discordgo.Session, channelID, messageID string)
 	return nil
 }
 
-func getMemberInfoFromMember(member *discordgo.Member, role string) (*MemberInfo, error) {
+func getMemberInfoFromMember(member *discordgo.Member) (*MemberInfo, error) {
 	// get username
 	username := member.Nick
 	lv, nickname := cache.ExtractLevelAndNickname(username)
@@ -254,16 +228,40 @@ func getMemberInfoFromMember(member *discordgo.Member, role string) (*MemberInfo
 
 	// get mainrole
 	mainRole := ""
-	for mr, roles := range mainRoleList {
-		if slices.Contains(roles, role) {
-			mainRole = mr
+	for mr, sr := range mainRoleList {
+		for _, dmr := range member.Roles {
+			if slices.Contains(sr, cache.GetRoleNameByID(dmr)) {
+				mainRole = mr
+				break
+			}
+		}
+	}
+	if mainRole == "" {
+		// cannot find main role
+		// do nothing, but log error
+		return nil, fmt.Errorf("cannot find main role: %s", username)
+	}
+
+	flatSrSlice := []string{}
+	for _, sr := range mainRoleList[mainRole] {
+		flatSrSlice = append(flatSrSlice, sr)
+	}
+	subRole := ""
+	for _, dsr := range member.Roles {
+		if slices.Contains(flatSrSlice, cache.GetRoleNameByID(dsr)) {
+			subRole = cache.GetRoleNameByID(dsr)
 			break
 		}
+	}
+	if subRole == "" {
+		// cannot find sub role
+		// do nothing, but log error
+		return nil, fmt.Errorf("cannot find sub role: %s", username)
 	}
 
 	return &MemberInfo{
 		MainRoleName: mainRole,
-		SubRoleName:  role,
+		SubRoleName:  subRole,
 		Level:        lv,
 		Nickname:     nickname,
 		Mention:      fmt.Sprintf("<@%s>", member.User.ID),
