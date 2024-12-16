@@ -449,19 +449,10 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
-		// count results
-		counts := map[string]int{}
-		for _, r := range results {
-			counts[r.Value]++
-		}
-
 		// print results
-		msg := fmt.Sprintf("**[투표 현황: '%s']**\n", poll.Title)
-		msg += fmt.Sprintf("* 참여자: %d명\n", len(results))
-		for _, v := range poll.Values {
-			msg += fmt.Sprintf("* %s: %d\n", v, counts[v])
+		if err := printPollResult(s, poll, results); err != nil {
+			return
 		}
-		sendGuildMessage(s, m.ChannelID, msg)
 	} else if strings.HasPrefix(m.Content, "!투표 정보 ") {
 		argsRaw := strings.TrimPrefix(m.Content, "!투표 정보 ")
 		args := parseArguments(argsRaw)
