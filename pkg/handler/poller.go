@@ -56,6 +56,8 @@ type PollResult struct {
 	Poll          Poll `gorm:"foreignKey:PollID"`
 }
 
+var loc, _ = time.LoadLocation("Asia/Seoul")
+
 func PollerInit(dg *discordgo.Session) error {
 	// setup gorm with sqlite
 	g, err := gorm.Open(sqlite.Open(environment.SQLiteDatabasePath), &gorm.Config{})
@@ -385,7 +387,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			}
 			msg += fmt.Sprintf("* [%s] '%s' - %s 까지 (응답 기한 %d시간 남음)\n",
 				id,
-				p.Title, p.StartedAt.Add(time.Duration(p.Duration)*time.Hour).Format("2006-01-02 15:04:05"),
+				p.Title, p.StartedAt.Add(time.Duration(p.Duration)*time.Hour).In(loc).Format("2006-01-02 15:04:05"),
 				int(time.Until(p.StartedAt.Add(time.Duration(p.Duration)*time.Hour)).Hours()))
 		}
 		if len(pollMap["active"]) == 0 {
@@ -410,7 +412,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			if p.Identifiable {
 				id = "기명"
 			}
-			msg += fmt.Sprintf("* [%s] '%s' - %s\n", id, p.Title, p.StartedAt.Add(time.Duration(p.Duration)*time.Hour).Format("2006-01-02 15:04:05"))
+			msg += fmt.Sprintf("* [%s] '%s' - %s\n", id, p.Title, p.StartedAt.Add(time.Duration(p.Duration)*time.Hour).In(loc).Format("2006-01-02 15:04:05"))
 		}
 		if len(pollMap["expired"]) == 0 {
 			msg += "* 없음\n"
@@ -479,7 +481,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		msg += fmt.Sprintf("* 투표 제목: %s\n", poll.Title)
 		msg += fmt.Sprintf("* 투표 종류: %s\n", id)
 		msg += fmt.Sprintf("* 투표 기간: %d시간 (%s 까지)\n", poll.Duration,
-			poll.StartedAt.Add(time.Duration(poll.Duration)*time.Hour).Format("2006-01-02 15:04"))
+			poll.StartedAt.Add(time.Duration(poll.Duration)*time.Hour).In(loc).Format("2006-01-02 15:04"))
 		msg += "* 투표 선택지:\n"
 		for i, value := range poll.Values {
 			msg += fmt.Sprintf("  %d. %s\n", i+1, value)
