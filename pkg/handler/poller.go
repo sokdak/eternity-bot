@@ -437,7 +437,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
-		if time.Now().Before(poll.StartedAt.Add(time.Duration(poll.Duration) * time.Hour)) {
+		if !poll.Closed && time.Now().Before(poll.StartedAt.Add(time.Duration(poll.Duration)*time.Hour)) {
 			sendGuildMessage(s, m.ChannelID, "투표가 아직 종료되지 않았습니다.")
 			return
 		}
