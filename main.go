@@ -30,13 +30,20 @@ func main() {
 	}
 
 	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMembers | discordgo.IntentsMessageContent |
-		discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages
+		discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages |
+		discordgo.IntentsGuildMessageReactions | discordgo.IntentsGuildVoiceStates
 
 	if err := handler.PollerInit(dg); err != nil {
 		fmt.Println("Error initializing poller:", err)
 		return
 	}
 	defer handler.PollerFinalize()
+
+	if err := handler.ActivityInit(dg); err != nil {
+		fmt.Println("Error initializing activity:", err)
+		return
+	}
+	defer handler.ActivityFinalize()
 
 	dg.LogLevel = discordgo.LogDebug
 	err = dg.Open()
@@ -58,13 +65,17 @@ func main() {
 	veryShortTermTicker := time.NewTicker(15 * time.Second)
 	defer veryShortTermTicker.Stop()
 
-	shortTermTicker := time.NewTicker(30 * time.Minute)
+	shortTermTicker := time.NewTicker(5 * time.Minute)
 	defer shortTermTicker.Stop()
+
+	midTermTicker := time.NewTicker(30 * time.Minute)
+	defer midTermTicker.Stop()
 
 	longTermTicker := time.NewTicker(6 * time.Hour)
 	defer longTermTicker.Stop()
 
 	startTime := time.Now()
+	fmt.Printf("Bot is now running. Press CTRL+C to exit. (started at %s)\n", startTime.Format("2006-01-02 15:04:05"))
 
 	for {
 		select {
@@ -75,6 +86,10 @@ func main() {
 			log.Println("Received OS signal, shutting down gracefully...")
 			return
 		case <-veryShortTermTicker.C:
+			if err := handler.HandlePersistLastActivityTime(); err != nil {
+				fmt.Println("Error handling persist last activity time:", err)
+			}
+		case <-shortTermTicker.C:
 			err := handler.CounselPoller(dg, n, startTime, environment.NotionCounselDBID, environment.DiscordGuildID, environment.DiscordCounselChannelID)
 			if err != nil {
 				fmt.Println("Error polling counsel:", err)
@@ -82,7 +97,7 @@ func main() {
 			if err := handler.PollFinishChecker(dg); err != nil {
 				fmt.Println("Error checking poll finish:", err)
 			}
-		case <-shortTermTicker.C:
+		case <-midTermTicker.C:
 			err := handler.UpdateMessageWithRoles(dg,
 				environment.DiscordGuildInfoChannelID, environment.DiscordGuildInfoByRoleMessageID)
 			if err != nil {

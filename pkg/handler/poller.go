@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-var db *gorm.DB
+var pdb *gorm.DB
 
 type StringSlice []string
 
@@ -60,11 +60,11 @@ var loc, _ = time.LoadLocation("Asia/Seoul")
 
 func PollerInit(dg *discordgo.Session) error {
 	// setup gorm with sqlite
-	g, err := gorm.Open(sqlite.Open(environment.SQLiteDatabasePath), &gorm.Config{})
+	g, err := gorm.Open(sqlite.Open(environment.PollSQLiteDBPath), &gorm.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to connect database: %w", err)
 	}
-	db = g
+	pdb = g
 
 	if err := g.AutoMigrate(&Poll{}); err != nil {
 		return fmt.Errorf("failed to migrate poll table: %w", err)
@@ -80,7 +80,7 @@ func PollerInit(dg *discordgo.Session) error {
 }
 
 func PollerFinalize() {
-	sqlDB, err := db.DB()
+	sqlDB, err := pdb.DB()
 	if err != nil {
 		fmt.Println("failed to get db connection for close: %w", err)
 		return
@@ -127,7 +127,7 @@ func userDMPollHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// check if the pollresult is already created
 		var poll PollResult
-		err = db.Where(&PollResult{PollID: uint(pollID), DiscordUserID: m.Author.ID}).First(&poll).Error
+		err = pdb.Where(&PollResult{PollID: uint(pollID), DiscordUserID: m.Author.ID}).First(&poll).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			sendMessage(s, m.Author.ID, "투표 응답 중 오류가 발생했습니다.")
 			return
@@ -139,7 +139,7 @@ func userDMPollHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// get poll
 		var p Poll
-		if err := db.Where("id = ?", pollID).First(&p).Error; err != nil {
+		if err := pdb.Where("id = ?", pollID).First(&p).Error; err != nil {
 			sendMessage(s, m.Author.ID, "해당 투표를 찾을 수 없거나 이미 종료된 투표입니다.")
 			return
 		}
@@ -169,7 +169,7 @@ func userDMPollHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			Value:         p.Values[valueIndex-1],
 			PollID:        uint(pollID),
 		}
-		if err := db.Create(&poll).Error; err != nil {
+		if err := pdb.Create(&poll).Error; err != nil {
 			sendMessage(s, m.Author.ID, "투표 응답 중 오류가 발생했습니다.")
 			return
 		}
@@ -212,7 +212,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// check if the poll is already created
 		var poll Poll
-		if err := db.Where("title = ?", args[2]).First(&poll).Error; err == nil {
+		if err := pdb.Where("title = ?", args[2]).First(&poll).Error; err == nil {
 			sendGuildMessage(s, m.ChannelID, "이미 생성된 투표가 있습니다.")
 			return
 		}
@@ -233,7 +233,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			Description:  "",
 			Duration:     duration,
 		}
-		if err := db.Create(&poll).Error; err != nil {
+		if err := pdb.Create(&poll).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "투표 생성 중 오류가 발생했습니다.")
 			return
 		}
@@ -248,7 +248,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		var poll Poll
-		if err := db.Where("title = ?", args[0]).First(&poll).Error; err != nil {
+		if err := pdb.Where("title = ?", args[0]).First(&poll).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "해당 투표를 찾을 수 없습니다.")
 			return
 		}
@@ -259,7 +259,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		poll.StartedAt = time.Now()
-		if err := db.Save(&poll).Error; err != nil {
+		if err := pdb.Save(&poll).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "투표 시작 중 오류가 발생했습니다.")
 			return
 		}
@@ -278,7 +278,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		//}
 		//
 		//var poll Poll
-		//if err := db.Where("title = ?", args[0]).First(&poll).Error; err != nil {
+		//if err := pdb.Where("title = ?", args[0]).First(&poll).Error; err != nil {
 		//	sendGuildMessage(s, m.ChannelID, "해당 투표를 찾을 수 없습니다.")
 		//	return
 		//}
@@ -308,7 +308,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		var poll Poll
-		if err := db.Where("title = ?", args[0]).First(&poll).Error; err != nil {
+		if err := pdb.Where("title = ?", args[0]).First(&poll).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "해당 투표를 찾을 수 없습니다.")
 			return
 		}
@@ -319,7 +319,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		poll.Description = hdescs[1]
-		if err := db.Save(&poll).Error; err != nil {
+		if err := pdb.Save(&poll).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "투표 설명을 저장하는 중 오류가 발생했습니다.")
 			return
 		}
@@ -334,7 +334,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		var poll Poll
-		if err := db.Where("title = ?", args[0]).First(&poll).Error; err != nil {
+		if err := pdb.Where("title = ?", args[0]).First(&poll).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "해당 투표를 찾을 수 없습니다.")
 			return
 		}
@@ -354,7 +354,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		sendGuildMessage(s, m.ChannelID, fmt.Sprintf("투표('%s') 알림이 재발송되었습니다.", poll.Title))
 	} else if strings.HasPrefix(m.Content, "!투표 목록") {
 		polls := []Poll{}
-		if err := db.Find(&polls).Error; err != nil {
+		if err := pdb.Find(&polls).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "투표 목록을 가져오는 중 오류가 발생했습니다.")
 			return
 		}
@@ -429,7 +429,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		var poll Poll
-		if err := db.Where("title = ?", args[0]).First(&poll).Error; err != nil {
+		if err := pdb.Where("title = ?", args[0]).First(&poll).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "해당 투표를 찾을 수 없습니다.")
 			return
 		}
@@ -446,7 +446,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		// get poll results
 		results := []PollResult{}
-		if err := db.Where("poll_id = ?", poll.ID).Find(&results).Error; err != nil {
+		if err := pdb.Where("poll_id = ?", poll.ID).Find(&results).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "투표 결과를 가져오는 중 오류가 발생했습니다.")
 			return
 		}
@@ -465,7 +465,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		var poll Poll
-		if err := db.Where("title = ?", args[0]).First(&poll).Error; err != nil {
+		if err := pdb.Where("title = ?", args[0]).First(&poll).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "해당 투표를 찾을 수 없습니다.")
 			return
 		}
@@ -533,7 +533,7 @@ func sendPolls(s *discordgo.Session, guildBotManageChannelID string, poll Poll) 
 	// filter that only not voted members
 	var votedMembers []string
 	var pollResults []PollResult
-	if err := db.Where("poll_id = ?", poll.ID).Find(&pollResults).Error; err != nil {
+	if err := pdb.Where("poll_id = ?", poll.ID).Find(&pollResults).Error; err != nil {
 		sendGuildMessage(s, guildBotManageChannelID, "투표 결과를 가져오는 중 오류가 발생했습니다.")
 		return
 	}
@@ -648,7 +648,7 @@ func filterPollTarget(poll Poll, roleNameIdMap map[string]string,
 func PollFinishChecker(dg *discordgo.Session) error {
 	// check if poll is finished
 	polls := []Poll{}
-	if err := db.Find(&polls).Error; err != nil {
+	if err := pdb.Find(&polls).Error; err != nil {
 		return fmt.Errorf("failed to get polls: %w", err)
 	}
 
@@ -665,7 +665,7 @@ func PollFinishChecker(dg *discordgo.Session) error {
 		if time.Now().After(poll.StartedAt.Add(time.Duration(poll.Duration) * time.Hour)) {
 			// get poll results
 			results := []PollResult{}
-			if err := db.Where("poll_id = ?", poll.ID).Find(&results).Error; err != nil {
+			if err := pdb.Where("poll_id = ?", poll.ID).Find(&results).Error; err != nil {
 				return fmt.Errorf("failed to get poll results: %w", err)
 			}
 
@@ -676,7 +676,7 @@ func PollFinishChecker(dg *discordgo.Session) error {
 
 			// update poll
 			poll.Closed = true
-			if err := db.Save(&poll).Error; err != nil {
+			if err := pdb.Save(&poll).Error; err != nil {
 				return fmt.Errorf("failed to save poll: %w", err)
 			}
 			sendGuildMessage(dg, environment.DiscordGuildPollChannelID, fmt.Sprintf("투표('%s')가 기간 도래로 종료되었습니다.", poll.Title))
@@ -693,7 +693,7 @@ func PollFinishChecker(dg *discordgo.Session) error {
 		// filter that only not voted members
 		var votedMembers []string
 		var pollResults []PollResult
-		if err := db.Where("poll_id = ?", poll.ID).Find(&pollResults).Error; err != nil {
+		if err := pdb.Where("poll_id = ?", poll.ID).Find(&pollResults).Error; err != nil {
 			return fmt.Errorf("failed to get poll results: %w", err)
 		}
 		for _, r := range pollResults {
@@ -713,7 +713,7 @@ func PollFinishChecker(dg *discordgo.Session) error {
 
 		// get poll results
 		results := []PollResult{}
-		if err := db.Where("poll_id = ?", poll.ID).Find(&results).Error; err != nil {
+		if err := pdb.Where("poll_id = ?", poll.ID).Find(&results).Error; err != nil {
 			return fmt.Errorf("failed to get poll results: %w", err)
 		}
 
@@ -723,7 +723,7 @@ func PollFinishChecker(dg *discordgo.Session) error {
 
 		// update poll
 		poll.Closed = true
-		if err := db.Save(&poll).Error; err != nil {
+		if err := pdb.Save(&poll).Error; err != nil {
 			return fmt.Errorf("failed to save poll: %w", err)
 		}
 		sendGuildMessage(dg, environment.DiscordGuildPollChannelID, fmt.Sprintf("투표('%s')가 전원 투표로 조기 종료되었습니다.", poll.Title))

@@ -15,7 +15,8 @@ var (
 	NotionBotAPIKey   = lookupEnv("NOTION_BOT_API_KEY", "fake")
 	NotionCounselDBID = lookupEnv("NOTION_COUNSEL_DB_ID", "fake")
 
-	SQLiteDatabasePath = lookupEnv("SQLITE_DB_PATH", "poller.db")
+	PollSQLiteDBPath     = lookupEnv("POLL_SQLITE_DB_PATH", "poller.db")
+	ActivitySQLiteDBPath = lookupEnv("ACTIVITY_SQLITE_DB_PATH", "activity.db")
 )
 
 func lookupEnv(key string, def string) string {
