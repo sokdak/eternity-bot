@@ -38,7 +38,6 @@ func ActivityInit(dg *discordgo.Session) error {
 	// add watchers
 	dg.AddHandler(onMessageCreate)
 	dg.AddHandler(onMessageUpdate)
-	dg.AddHandler(onMessageDelete)
 	dg.AddHandler(onReactionAdd)
 	dg.AddHandler(onReactionRemove)
 	dg.AddHandler(onVoiceStateUpdate)
@@ -61,6 +60,7 @@ func HandlePersistLastActivityTime() error {
 	lock.Lock()
 	defer lock.Unlock()
 
+	p := []MemberInfoPersist{}
 	for userID, lastActivityTime := range lastGuildActivity {
 		m := cache.GetGuildMember(userID)
 		if m == nil {
@@ -91,8 +91,13 @@ func HandlePersistLastActivityTime() error {
 				memberInfo.Level = info.Level
 			}
 			memberInfo.LastActivityTime = lastActivityTime
-			adb.Save(&memberInfo)
+			p = append(p, memberInfo)
 		}
+	}
+
+	// batch update
+	if len(p) > 0 {
+		adb.Save(&p)
 	}
 
 	return nil
@@ -111,12 +116,6 @@ func onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func onMessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
-	if !m.Author.Bot {
-		updateGuildActivity(m.Author.ID)
-	}
-}
-
-func onMessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 	if !m.Author.Bot {
 		updateGuildActivity(m.Author.ID)
 	}
