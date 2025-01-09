@@ -62,6 +62,18 @@ func main() {
 		return
 	}
 
+	if err := handler.RegisterRaidCommands(dg); err != nil {
+		fmt.Println("Error registering raid commands:", err)
+		return
+	}
+	defer handler.UnregisterCommands(dg)
+
+	if err := handler.RaidInit(dg); err != nil {
+		fmt.Println("Error initializing raid:", err)
+		return
+	}
+	defer handler.RaidFinalize()
+
 	veryShortTermTicker := time.NewTicker(15 * time.Second)
 	defer veryShortTermTicker.Stop()
 
@@ -86,6 +98,9 @@ func main() {
 			log.Println("Received OS signal, shutting down gracefully...")
 			return
 		case <-veryShortTermTicker.C:
+			if err := handler.RaidSubscriptionRefresh(dg); err != nil {
+				fmt.Println("Error refreshing raid subscription:", err)
+			}
 			if err := handler.HandlePersistLastActivityTime(); err != nil {
 				fmt.Println("Error handling persist last activity time:", err)
 			}

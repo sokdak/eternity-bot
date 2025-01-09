@@ -45,7 +45,7 @@ func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) e
 
 	var ms []MemberInfo
 	for _, member := range members {
-		m, err := getMemberInfoFromMember(member)
+		m, err := GetMemberInfoFromMember(member)
 		if err != nil {
 			return fmt.Errorf("failed to get member info: %w", err)
 		}
@@ -154,7 +154,7 @@ func UpdateMessagesWithLevels(s *discordgo.Session, channelID, messageID string)
 
 	var ms []MemberInfo
 	for _, member := range members {
-		m, err := getMemberInfoFromMember(member)
+		m, err := GetMemberInfoFromMember(member)
 		if err != nil {
 			return fmt.Errorf("failed to get member info: %w", err)
 		}
@@ -216,7 +216,7 @@ func UpdateMessagesWithLevels(s *discordgo.Session, channelID, messageID string)
 	return nil
 }
 
-func getMemberInfoFromMember(member *discordgo.Member) (*MemberInfo, error) {
+func GetMemberInfoFromMember(member *discordgo.Member) (*MemberInfo, error) {
 	// get username
 	username := member.Nick
 	lv, nickname := cache.ExtractLevelAndNickname(username)

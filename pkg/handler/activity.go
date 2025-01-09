@@ -41,7 +41,6 @@ func ActivityInit(dg *discordgo.Session) error {
 	dg.AddHandler(onReactionAdd)
 	dg.AddHandler(onReactionRemove)
 	dg.AddHandler(onVoiceStateUpdate)
-	dg.AddHandler(onInteractionCreate)
 	dg.AddHandler(onTypingStart)
 
 	return nil
@@ -66,7 +65,7 @@ func HandlePersistLastActivityTime() error {
 		if m == nil {
 			return fmt.Errorf("failed to get guild member")
 		}
-		info, err := getMemberInfoFromMember(m)
+		info, err := GetMemberInfoFromMember(m)
 		if err != nil {
 			return fmt.Errorf("failed to get member info")
 		}
@@ -133,10 +132,6 @@ func onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateUpdate) {
 	// vs.BeforeUpdate와 vs.AfterUpdate를 비교하거나,
 	// 간단히 vs.VoiceState.ChannelID != "" 로 입장/이동 시점 체크
 	updateGuildActivity(vs.UserID)
-}
-
-func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	updateGuildActivity(i.Interaction.User.ID)
 }
 
 func onTypingStart(s *discordgo.Session, t *discordgo.TypingStart) {

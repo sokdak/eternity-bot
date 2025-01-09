@@ -798,7 +798,7 @@ func getPollMemberMap(results []PollResult) map[string][]MemberInfo {
 			fmt.Printf("not existing guild member: %s\n", r.DiscordUserID)
 			continue
 		}
-		member, err := getMemberInfoFromMember(m)
+		member, err := GetMemberInfoFromMember(m)
 		if err != nil {
 			return nil
 		}
