@@ -198,3 +198,5 @@ fabric.properties
 # End of https://www.toptal.com/developers/gitignore/api/intellij+all,goland,visualstudiocode,helm
 
 bin/**
+
+**.db
