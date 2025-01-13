@@ -13,6 +13,7 @@ var (
 	DiscordGuildPollChannelID             = lookupEnv("DISCORD_GP_CHANNEL_ID", "fake")
 	DiscordGuildRaidSubscriptionChannelID = lookupEnv("DISCORD_GRSC_CHANNEL_ID", "fake")
 	DiscordGuildRaidManageChannelID       = lookupEnv("DISCORD_GRMC_CHANNEL_ID", "fake")
+	DiscordGuildRaidInfoChannelID         = lookupEnv("DISCORD_GRI_CHANNEL_ID", "fake")
 
 	NotionBotAPIKey   = lookupEnv("NOTION_BOT_API_KEY", "fake")
 	NotionCounselDBID = lookupEnv("NOTION_COUNSEL_DB_ID", "fake")

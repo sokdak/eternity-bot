@@ -1,7 +1,9 @@
 package discord
 
 import (
+	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"github.com/sokdak/eternity-bot/pkg/model"
 	"strings"
 	"time"
 )
@@ -219,4 +221,60 @@ func SendAdminAddAttendeeModal(s *discordgo.Session, i *discordgo.Interaction, s
 	if err != nil {
 		panic(err)
 	}
+}
+
+func SendAdminRaidInfoResponse(s *discordgo.Session, i *discordgo.Interaction, schedule model.RaidSchedule, info model.RaidInfo, attendCount int) error {
+	// raid record
+	msg := fmt.Sprintf("**[%s] %s (%d 트라이) 레이드 기록**\n\n", schedule.Raid.RaidName, schedule.StartTime.Format("2006-01-02 15:04"), schedule.TryCount)
+	if info.EntranceTime.IsZero() {
+		msg += "* 입장: 기록 없음\n"
+	} else {
+		msg += fmt.Sprintf("* 입장: %s\n", info.EntranceTime.Format("2006-01-02 15:04"))
+	}
+	if info.StartTime.IsZero() {
+		msg += "* 시작: 기록 없음\n"
+	} else {
+		msg += fmt.Sprintf("* 시작: %s\n", info.StartTime.Format("2006-01-02 15:04"))
+	}
+	if info.EndTime.IsZero() {
+		msg += "* 종료: 기록 없음\n"
+	} else {
+		msg += fmt.Sprintf("* 종료: %s\n", info.EndTime.Format("2006-01-02 15:04"))
+	}
+	msg += fmt.Sprintf("* 참가자: %d명", attendCount)
+
+	s.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Content: msg,
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.Button{
+							Label:    "입장 기록",
+							Style:    discordgo.PrimaryButton,
+							CustomID: fmt.Sprintf("admin-info-record-entrance_%d", info.ID),
+						},
+						discordgo.Button{
+							Label:    "시작 기록",
+							Style:    discordgo.SecondaryButton,
+							CustomID: fmt.Sprintf("admin-info-record-start_%d", info.ID),
+						},
+						discordgo.Button{
+							Label:    "종료 기록",
+							Style:    discordgo.SecondaryButton,
+							CustomID: fmt.Sprintf("admin-info-record-end_%d", info.ID),
+						},
+						discordgo.Button{
+							Label:    "파티 구성",
+							Style:    discordgo.SecondaryButton,
+							CustomID: fmt.Sprintf("admin-info-party-formation_%d", info.ID),
+						},
+					},
+				},
+			},
+		},
+	})
+
+	return nil
 }

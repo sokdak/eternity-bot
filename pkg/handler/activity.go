@@ -6,6 +6,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/sokdak/eternity-bot/pkg/cache"
 	"github.com/sokdak/eternity-bot/pkg/environment"
+	"github.com/sokdak/eternity-bot/pkg/model"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"sync"
@@ -19,7 +20,7 @@ var lock = &sync.Mutex{}
 
 type MemberInfoPersist struct {
 	gorm.Model
-	MemberInfo
+	model.MemberInfo
 	LastActivityTime time.Time
 }
 

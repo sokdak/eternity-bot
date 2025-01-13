@@ -7,6 +7,7 @@ import (
 	"github.com/sokdak/eternity-bot/pkg/cache"
 	"github.com/sokdak/eternity-bot/pkg/discord"
 	"github.com/sokdak/eternity-bot/pkg/environment"
+	"github.com/sokdak/eternity-bot/pkg/model"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"slices"
@@ -15,51 +16,16 @@ import (
 	"time"
 )
 
-type Raid struct {
-	gorm.Model
-	RaidName    string
-	Type        string
-	Description string
-	Manager     string
-}
-
-type RaidSchedule struct {
-	gorm.Model
-	RaidID              uint
-	Raid                Raid `gorm:"foreignKey:RaidID"`
-	TryCount            int
-	SubscriptionEndTime time.Time
-	StartTime           time.Time
-	MessageID           string
-}
-
-type RaidAttend struct {
-	gorm.Model
-	MemberInfo
-	Canceled       bool
-	RaidScheduleID uint
-	RaidSchedule   RaidSchedule `gorm:"foreignKey:RaidScheduleID"`
-}
-
-type RaidInfo struct {
-	gorm.Model
-	EntranceTime   time.Time
-	StartTime      time.Time
-	EndTime        time.Time
-	RaidScheduleID uint
-	RaidSchedule   RaidSchedule `gorm:"foreignKey:RaidScheduleID"`
-}
-
 var rdb *gorm.DB
 
 func RaidSubscriptionRefresh(dg *discordgo.Session) error {
 	// list schedules
-	var schedules []RaidSchedule
+	var schedules []model.RaidSchedule
 	rdb.Find(&schedules)
 
 	for _, sc := range schedules {
 		// find attends
-		var attends []RaidAttend
+		var attends []model.RaidAttend
 		rdb.Where("raid_schedule_id = ?", sc.ID).Find(&attends)
 
 		// populate member list
@@ -113,6 +79,10 @@ func RaidSubscriptionRefresh(dg *discordgo.Session) error {
 	return nil
 }
 
+func RaidInfoRefresh(dg *discordgo.Session) error {
+	return nil
+}
+
 func RaidInit(dg *discordgo.Session) error {
 	var err error
 	rdb, err = gorm.Open(sqlite.Open(environment.RaidSQLiteDBPath), &gorm.Config{})
@@ -120,22 +90,22 @@ func RaidInit(dg *discordgo.Session) error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	err = rdb.AutoMigrate(&Raid{})
+	err = rdb.AutoMigrate(&model.Raid{})
 	if err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
-	err = rdb.AutoMigrate(&RaidSchedule{})
+	err = rdb.AutoMigrate(&model.RaidSchedule{})
 	if err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
-	err = rdb.AutoMigrate(&RaidAttend{})
+	err = rdb.AutoMigrate(&model.RaidAttend{})
 	if err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
-	err = rdb.AutoMigrate(&RaidInfo{})
+	err = rdb.AutoMigrate(&model.RaidInfo{})
 	if err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
@@ -210,7 +180,7 @@ func raidScheduleUserInitialHandler(s *discordgo.Session, i *discordgo.Interacti
 	}
 
 	// list my schedules
-	var attends []RaidAttend
+	var attends []model.RaidAttend
 	rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").Where("mention = ?", m.Mention).Find(&attends)
 
 	var attendList []string
@@ -259,7 +229,7 @@ func raidScheduleUserInitialHandler(s *discordgo.Session, i *discordgo.Interacti
 
 func raidScheduleAdminInitialHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	// list schedules
-	var schedules []RaidSchedule
+	var schedules []model.RaidSchedule
 	rdb.Preload("Raid").Find(&schedules)
 
 	// list schedules
@@ -328,7 +298,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			discord.SendNewRaidModal(s, i.Interaction)
 		case "admin-add-schedule":
 			// get existing raids
-			var raids []Raid
+			var raids []model.Raid
 			rdb.Find(&raids)
 
 			// list raids
@@ -342,7 +312,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			discord.SendInteractionWithButtons(s, i.Interaction, "추가 할 레이드 일정을 선택하세요.", raidSelectionMap, true)
 		case "admin-remove-schedule":
 			// list schedules
-			var schedules []RaidSchedule
+			var schedules []model.RaidSchedule
 			rdb.Preload("Raid").Find(&schedules)
 
 			// list schedules
@@ -361,7 +331,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			discord.SendInteractionWithButtons(s, i.Interaction, "삭제 할 레이드 일정을 선택하세요.", scheduleSelectionMap, true)
 		case "admin-edit-schedule":
 			// list schedules
-			var schedules []RaidSchedule
+			var schedules []model.RaidSchedule
 			rdb.Preload("Raid").Find(&schedules)
 
 			// list schedules
@@ -432,7 +402,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			scheduleID := selectMenuValues[0]
 
 			// get schedule
-			var schedule RaidSchedule
+			var schedule model.RaidSchedule
 			err := rdb.First(&schedule, scheduleID).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return
@@ -442,7 +412,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			discord.SendEditRaidScheduleModal(s, i.Interaction, scheduleID)
 		case "admin-edit-attendance":
 			// list schedules
-			var schedules []RaidSchedule
+			var schedules []model.RaidSchedule
 			rdb.Preload("Raid").Find(&schedules)
 
 			// create selections
@@ -503,14 +473,14 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			scheduleID := selectMenuValues[0]
 
 			// get schedule
-			var schedule RaidSchedule
+			var schedule model.RaidSchedule
 			err := rdb.Preload("Raid").First(&schedule, scheduleID).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return
 			}
 
 			// get attendees
-			var attends []RaidAttend
+			var attends []model.RaidAttend
 			rdb.Preload("MemberInfo").Where("raid_schedule_id = ?", scheduleID).Find(&attends)
 
 			// create user list
@@ -568,7 +538,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			}
 
 			// list attend by user
-			var attends []RaidAttend
+			var attends []model.RaidAttend
 			err = rdb.Where("nickname = ?", m.Nickname).Find(&attends).Error
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return
@@ -580,7 +550,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			}
 
 			// list schedules
-			var schedules []RaidSchedule
+			var schedules []model.RaidSchedule
 			rdb.Preload("Raid").Find(&schedules)
 
 			// create selections
@@ -644,7 +614,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			scheduleID := selectMenuValues[0]
 
 			// get schedule
-			var schedule RaidSchedule
+			var schedule model.RaidSchedule
 			err := rdb.Preload("Raid").First(&schedule, scheduleID).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return
@@ -661,7 +631,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			}
 
 			// check if already attended
-			var attend RaidAttend
+			var attend model.RaidAttend
 			err = rdb.Where("nickname = ? AND raid_schedule_id = ?", m.Nickname, schedule.ID).First(&attend).Error
 			if err == nil {
 				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -679,7 +649,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			}
 
 			// create new attend
-			newAttend := RaidAttend{
+			newAttend := model.RaidAttend{
 				MemberInfo:     *m,
 				RaidScheduleID: schedule.ID,
 				Canceled:       false,
@@ -706,7 +676,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			}
 
 			// list attend
-			var attends []RaidAttend
+			var attends []model.RaidAttend
 			rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").Where("nickname = ?", m.Nickname).Find(&attends)
 
 			var selectOptions []discordgo.SelectMenuOption
@@ -765,7 +735,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			attendID := selectMenuValues[0]
 
 			// get attend
-			var attend RaidAttend
+			var attend model.RaidAttend
 			err := rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").Where("id = ?", attendID).First(&attend).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -799,7 +769,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			attendeeID := selectMenuValues[0]
 
 			// get attendee
-			var attend RaidAttend
+			var attend model.RaidAttend
 			err := rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").First(&attend, attendeeID).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -829,7 +799,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			})
 		case "admin-manage-info":
 			// list schedules
-			var schedules []RaidSchedule
+			var schedules []model.RaidSchedule
 
 			// startTime 기준 최신 25개 불러오기
 			rdb.Order("start_time desc").Limit(25).Preload("Raid").Find(&schedules)
@@ -889,61 +859,38 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			scheduleID := selectMenuValues[0]
 
 			// get schedule
-			var schedule RaidSchedule
+			var schedule model.RaidSchedule
 			err := rdb.Preload("Raid").First(&schedule, scheduleID).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return
 			}
 
 			// get attend
-			var attends []RaidAttend
+			var attends []model.RaidAttend
 			rdb.Preload("MemberInfo").Where("raid_schedule_id = ? AND canceled = ?", scheduleID, false).Find(&attends)
 			attendCount := len(attends)
 
 			// get info
-			var info RaidInfo
+			var info model.RaidInfo
 			err = rdb.Where("raid_schedule_id = ?", scheduleID).First(&info).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				info = RaidInfo{
+				// create message
+				msg, err := s.ChannelMessageSend(environment.DiscordGuildRaidInfoChannelID,
+					fmt.Sprintf("**[%s] %s - %d트라이**",
+						schedule.Raid.RaidName, schedule.StartTime.Format("2006-01-02"), schedule.TryCount))
+				if err != nil {
+					panic(err)
+				}
+
+				info = model.RaidInfo{
 					RaidScheduleID: schedule.ID,
+					MessageID:      msg.ID,
 				}
 				rdb.Create(&info)
 			}
 
 			// send message
-			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseUpdateMessage,
-				Data: &discordgo.InteractionResponseData{
-					Content: fmt.Sprintf("**[%s] %s (%d 트라이) 레이드 기록**\n\n* 입장: %s\n* 시작: %s\n* 종료: %s\n* 참가자: %d명",
-						schedule.Raid.RaidName, schedule.StartTime.Format("2006-01-02 15:04"), schedule.TryCount,
-						info.EntranceTime.Format("2006-01-02 15:04"),
-						info.StartTime.Format("2006-01-02 15:04"),
-						info.EndTime.Format("2006-01-02 15:04"),
-						attendCount,
-					),
-					Components: []discordgo.MessageComponent{
-						discordgo.ActionsRow{
-							Components: []discordgo.MessageComponent{
-								discordgo.Button{
-									Label:    "입장 기록",
-									Style:    discordgo.PrimaryButton,
-									CustomID: fmt.Sprintf("admin-info-record-entrance_%d", info.ID),
-								},
-								discordgo.Button{
-									Label:    "시작 기록",
-									Style:    discordgo.SecondaryButton,
-									CustomID: fmt.Sprintf("admin-info-record-start_%d", info.ID),
-								},
-								discordgo.Button{
-									Label:    "종료 기록",
-									Style:    discordgo.SecondaryButton,
-									CustomID: fmt.Sprintf("admin-info-record-end_%d", info.ID),
-								},
-							},
-						},
-					},
-				},
-			})
+			discord.SendAdminRaidInfoResponse(s, i.Interaction, schedule, info, attendCount)
 		}
 		return
 	}
@@ -953,7 +900,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		raidID := args[1]
 
 		// get raid
-		var raid Raid
+		var raid model.Raid
 		err := rdb.First(&raid, raidID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return
@@ -965,7 +912,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		scheduleID := args[1]
 
 		// get schedule
-		var schedule RaidSchedule
+		var schedule model.RaidSchedule
 		err := rdb.First(&schedule, scheduleID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return
@@ -985,14 +932,14 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		scheduleID := args[1]
 
 		// get schedule
-		var schedule RaidSchedule
+		var schedule model.RaidSchedule
 		err := rdb.First(&schedule, scheduleID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return
 		}
 
 		// get attendees
-		var attends []RaidAttend
+		var attends []model.RaidAttend
 		rdb.Where("raid_schedule_id = ?", scheduleID).Find(&attends)
 
 		// create selections
@@ -1040,14 +987,14 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		infoID := args[1]
 
 		// get info
-		var info RaidInfo
+		var info model.RaidInfo
 		err := rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").First(&info, infoID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return
 		}
 
 		// get attend
-		var attends []RaidAttend
+		var attends []model.RaidAttend
 		rdb.Where("raid_schedule_id = ? AND canceled = ?", info.RaidScheduleID, false).Find(&attends)
 		attendCount := len(attends)
 
@@ -1056,51 +1003,19 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		rdb.Save(&info)
 
 		// send message
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseUpdateMessage,
-			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("**[%s] %s (%d 트라이) 레이드 기록**\n\n* 입장: %s\n* 시작: %s\n* 종료: %s\n* 참가자: %d명",
-					info.RaidSchedule.Raid.RaidName, info.RaidSchedule.StartTime.Format("2006-01-02 15:04"), info.RaidSchedule.TryCount,
-					info.EntranceTime.Format("2006-01-02 15:04"),
-					info.StartTime.Format("2006-01-02 15:04"),
-					info.EndTime.Format("2006-01-02 15:04"),
-					attendCount,
-				),
-				Components: []discordgo.MessageComponent{
-					discordgo.ActionsRow{
-						Components: []discordgo.MessageComponent{
-							discordgo.Button{
-								Label:    "입장 기록",
-								Style:    discordgo.PrimaryButton,
-								CustomID: fmt.Sprintf("admin-info-record-entrance_%d", info.ID),
-							},
-							discordgo.Button{
-								Label:    "시작 기록",
-								Style:    discordgo.SecondaryButton,
-								CustomID: fmt.Sprintf("admin-info-record-start_%d", info.ID),
-							},
-							discordgo.Button{
-								Label:    "종료 기록",
-								Style:    discordgo.SecondaryButton,
-								CustomID: fmt.Sprintf("admin-info-record-end_%d", info.ID),
-							},
-						},
-					},
-				},
-			},
-		})
+		discord.SendAdminRaidInfoResponse(s, i.Interaction, info.RaidSchedule, info, attendCount)
 	case "admin-info-record-start":
 		infoID := args[1]
 
 		// get info
-		var info RaidInfo
+		var info model.RaidInfo
 		err := rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").First(&info, infoID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return
 		}
 
 		// get attend
-		var attends []RaidAttend
+		var attends []model.RaidAttend
 		rdb.Where("raid_schedule_id = ? AND canceled = ?", info.RaidScheduleID, false).Find(&attends)
 		attendCount := len(attends)
 
@@ -1109,51 +1024,19 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		rdb.Save(&info)
 
 		// send message
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseUpdateMessage,
-			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("**[%s] %s (%d 트라이) 레이드 기록**\n\n* 입장: %s\n* 시작: %s\n* 종료: %s\n* 참가자: %d명",
-					info.RaidSchedule.Raid.RaidName, info.RaidSchedule.StartTime.Format("2006-01-02 15:04"), info.RaidSchedule.TryCount,
-					info.EntranceTime.Format("2006-01-02 15:04"),
-					info.StartTime.Format("2006-01-02 15:04"),
-					info.EndTime.Format("2006-01-02 15:04"),
-					attendCount,
-				),
-				Components: []discordgo.MessageComponent{
-					discordgo.ActionsRow{
-						Components: []discordgo.MessageComponent{
-							discordgo.Button{
-								Label:    "입장 기록",
-								Style:    discordgo.PrimaryButton,
-								CustomID: fmt.Sprintf("admin-info-record-entrance_%d", info.ID),
-							},
-							discordgo.Button{
-								Label:    "시작 기록",
-								Style:    discordgo.SecondaryButton,
-								CustomID: fmt.Sprintf("admin-info-record-start_%d", info.ID),
-							},
-							discordgo.Button{
-								Label:    "종료 기록",
-								Style:    discordgo.SecondaryButton,
-								CustomID: fmt.Sprintf("admin-info-record-end_%d", info.ID),
-							},
-						},
-					},
-				},
-			},
-		})
+		discord.SendAdminRaidInfoResponse(s, i.Interaction, info.RaidSchedule, info, attendCount)
 	case "admin-info-record-end":
 		infoID := args[1]
 
 		// get info
-		var info RaidInfo
+		var info model.RaidInfo
 		err := rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").First(&info, infoID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return
 		}
 
 		// get attend
-		var attends []RaidAttend
+		var attends []model.RaidAttend
 		rdb.Where("raid_schedule_id = ? AND canceled = ?", info.RaidScheduleID, false).Find(&attends)
 		attendCount := len(attends)
 
@@ -1162,39 +1045,21 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		rdb.Save(&info)
 
 		// send message
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseUpdateMessage,
-			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("**[%s] %s (%d 트라이) 레이드 기록**\n\n* 입장: %s\n* 시작: %s\n* 종료: %s\n* 참가자: %d명",
-					info.RaidSchedule.Raid.RaidName, info.RaidSchedule.StartTime.Format("2006-01-02 15:04"), info.RaidSchedule.TryCount,
-					info.EntranceTime.Format("2006-01-02 15:04"),
-					info.StartTime.Format("2006-01-02 15:04"),
-					info.EndTime.Format("2006-01-02 15:04"),
-					attendCount,
-				),
-				Components: []discordgo.MessageComponent{
-					discordgo.ActionsRow{
-						Components: []discordgo.MessageComponent{
-							discordgo.Button{
-								Label:    "입장 기록",
-								Style:    discordgo.PrimaryButton,
-								CustomID: fmt.Sprintf("admin-info-record-entrance_%d", info.ID),
-							},
-							discordgo.Button{
-								Label:    "시작 기록",
-								Style:    discordgo.SecondaryButton,
-								CustomID: fmt.Sprintf("admin-info-record-start_%d", info.ID),
-							},
-							discordgo.Button{
-								Label:    "종료 기록",
-								Style:    discordgo.SecondaryButton,
-								CustomID: fmt.Sprintf("admin-info-record-end_%d", info.ID),
-							},
-						},
-					},
-				},
-			},
-		})
+		discord.SendAdminRaidInfoResponse(s, i.Interaction, info.RaidSchedule, info, attendCount)
+	case "admin-info-party-formation":
+		infoID := args[1]
+
+		// get info
+		var info model.RaidInfo
+		err := rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").First(&info, infoID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return
+		}
+
+		// get attend
+		var attends []model.RaidAttend
+		rdb.Where("raid_schedule_id = ? AND canceled = ?", info.RaidScheduleID, false).Find(&attends)
+
 	}
 }
 
@@ -1223,14 +1088,14 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 		}
 
 		// find existing raid with raidName
-		var raid Raid
+		var raid model.Raid
 		err := rdb.Where("raid_name = ?", raidName).First(&raid).Error
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return
 		}
 
 		// create new raid
-		newRaid := Raid{
+		newRaid := model.Raid{
 			RaidName:    raidName,
 			Type:        raidType,
 			Description: raidDescription,
@@ -1278,7 +1143,7 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 		raidID := modalIdSplit[1]
 
 		// get raid
-		var raid Raid
+		var raid model.Raid
 		err := rdb.First(&raid, raidID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return
@@ -1305,7 +1170,7 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 			return
 		}
 
-		newRaidSchedule := RaidSchedule{
+		newRaidSchedule := model.RaidSchedule{
 			RaidID:              raid.ID,
 			TryCount:            raidCountInt,
 			StartTime:           t,
@@ -1343,7 +1208,7 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 		scheduleID := modalIdSplit[1]
 
 		// get schedule
-		var schedule RaidSchedule
+		var schedule model.RaidSchedule
 		err := rdb.First(&schedule, scheduleID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return
@@ -1401,14 +1266,14 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 		}
 
 		// check schedule is valid
-		var schedule RaidSchedule
+		var schedule model.RaidSchedule
 		err = rdb.First(&schedule, scheduleID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return
 		}
 
 		// create attend
-		newAttend := RaidAttend{
+		newAttend := model.RaidAttend{
 			MemberInfo:     *m,
 			RaidScheduleID: schedule.ID,
 			Canceled:       false,

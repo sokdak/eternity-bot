@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"github.com/sokdak/eternity-bot/pkg/cache"
+	"github.com/sokdak/eternity-bot/pkg/model"
 	"slices"
 	"sort"
 	"strings"
@@ -32,18 +33,10 @@ var mainRoleList = map[string][]string{
 	},
 }
 
-type MemberInfo struct {
-	SubRoleName  string
-	MainRoleName string
-	Level        int
-	Nickname     string
-	Mention      string
-}
-
 func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) error {
 	members := cache.ListAllMembers()
 
-	var ms []MemberInfo
+	var ms []model.MemberInfo
 	for _, member := range members {
 		m, err := GetMemberInfoFromMember(member)
 		if err != nil {
@@ -152,7 +145,7 @@ func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) e
 func UpdateMessagesWithLevels(s *discordgo.Session, channelID, messageID string) error {
 	members := cache.ListAllMembers()
 
-	var ms []MemberInfo
+	var ms []model.MemberInfo
 	for _, member := range members {
 		m, err := GetMemberInfoFromMember(member)
 		if err != nil {
@@ -216,7 +209,7 @@ func UpdateMessagesWithLevels(s *discordgo.Session, channelID, messageID string)
 	return nil
 }
 
-func GetMemberInfoFromMember(member *discordgo.Member) (*MemberInfo, error) {
+func GetMemberInfoFromMember(member *discordgo.Member) (*model.MemberInfo, error) {
 	// get username
 	username := member.Nick
 	lv, nickname := cache.ExtractLevelAndNickname(username)
@@ -259,7 +252,7 @@ func GetMemberInfoFromMember(member *discordgo.Member) (*MemberInfo, error) {
 		return nil, fmt.Errorf("cannot find sub role: %s", username)
 	}
 
-	return &MemberInfo{
+	return &model.MemberInfo{
 		MainRoleName: mainRole,
 		SubRoleName:  subRole,
 		Level:        lv,

@@ -8,6 +8,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/sokdak/eternity-bot/pkg/cache"
 	"github.com/sokdak/eternity-bot/pkg/environment"
+	"github.com/sokdak/eternity-bot/pkg/model"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"regexp"
@@ -151,7 +152,7 @@ func userDMPollHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		// check if poll is expired
-		if time.Now().After(p.StartedAt.Add(time.Duration(p.Duration) * time.Hour)) {
+		if time.Now().In(loc).After(p.StartedAt.Add(time.Duration(p.Duration) * time.Hour)) {
 			sendMessage(s, m.Author.ID, "해당 투표를 찾을 수 없거나 이미 종료된 투표입니다.")
 			return
 		}
@@ -258,7 +259,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
-		poll.StartedAt = time.Now()
+		poll.StartedAt = time.Now().In(loc)
 		if err := pdb.Save(&poll).Error; err != nil {
 			sendGuildMessage(s, m.ChannelID, "투표 시작 중 오류가 발생했습니다.")
 			return
@@ -344,7 +345,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
-		if time.Now().After(poll.StartedAt.Add(time.Duration(poll.Duration) * time.Hour)) {
+		if time.Now().In(loc).After(poll.StartedAt.Add(time.Duration(poll.Duration) * time.Hour)) {
 			sendGuildMessage(s, m.ChannelID, "투표가 이미 종료되었습니다.")
 			return
 		}
@@ -366,7 +367,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 				continue
 			} else {
 				// if poll is expired, append to expired
-				if time.Now().After(poll.StartedAt.Add(time.Duration(poll.Duration)*time.Hour)) ||
+				if time.Now().In(loc).After(poll.StartedAt.Add(time.Duration(poll.Duration)*time.Hour)) ||
 					poll.Closed {
 					pollMap["expired"] = append(pollMap["expired"], poll)
 					continue
@@ -439,7 +440,7 @@ func guildPollManageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
-		if !poll.Closed && time.Now().Before(poll.StartedAt.Add(time.Duration(poll.Duration)*time.Hour)) {
+		if !poll.Closed && time.Now().In(loc).Before(poll.StartedAt.Add(time.Duration(poll.Duration)*time.Hour)) {
 			sendGuildMessage(s, m.ChannelID, "투표가 아직 종료되지 않았습니다.")
 			return
 		}
@@ -662,7 +663,7 @@ func PollFinishChecker(dg *discordgo.Session) error {
 		}
 
 		// check if poll is expired
-		if time.Now().After(poll.StartedAt.Add(time.Duration(poll.Duration) * time.Hour)) {
+		if time.Now().In(loc).After(poll.StartedAt.Add(time.Duration(poll.Duration) * time.Hour)) {
 			// get poll results
 			results := []PollResult{}
 			if err := pdb.Where("poll_id = ?", poll.ID).Find(&results).Error; err != nil {
@@ -790,8 +791,8 @@ func printPollResult(dg *discordgo.Session, poll Poll, results []PollResult) err
 	return nil
 }
 
-func getPollMemberMap(results []PollResult) map[string][]MemberInfo {
-	var valueUserMap = map[string][]MemberInfo{}
+func getPollMemberMap(results []PollResult) map[string][]model.MemberInfo {
+	var valueUserMap = map[string][]model.MemberInfo{}
 	for _, r := range results {
 		m := cache.GetGuildMember(r.DiscordUserID)
 		if m == nil {
