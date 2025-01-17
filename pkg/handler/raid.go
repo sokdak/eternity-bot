@@ -21,7 +21,7 @@ var rdb *gorm.DB
 func RaidSubscriptionRefresh(dg *discordgo.Session) error {
 	// list schedules
 	var schedules []model.RaidSchedule
-	rdb.Find(&schedules)
+	rdb.Preload("Raid").Find(&schedules)
 
 	for _, sc := range schedules {
 		// find attends
@@ -48,14 +48,16 @@ func RaidSubscriptionRefresh(dg *discordgo.Session) error {
 		// send message
 		var msg string
 
-		msg += fmt.Sprintf("**%s - %d트라이 (%s 출발)**\n\n",
-			sc.StartTime.Format("01월 02일"), sc.TryCount, sc.StartTime.Format("15:04"))
+		msg += fmt.Sprintf("**[%s] %s - %d트라이 (%s 출발) 신청인원**\n\n",
+			sc.Raid.RaidName,
+			sc.StartTime.In(loc).Format("01월 02일"), sc.TryCount, sc.StartTime.In(loc).Format("15:04"))
 
 		for _, k := range keys {
 			msg += fmt.Sprintf("**%s**\n", k)
 			msg += strings.Join(memberListByRole[k], "\n")
 			msg += "\n\n"
 		}
+		msg += "~~                                        ~~"
 
 		// get latest message
 		cmsg, err := dg.ChannelMessage(environment.DiscordGuildRaidSubscriptionChannelID, sc.MessageID)
@@ -186,11 +188,11 @@ func raidScheduleUserInitialHandler(s *discordgo.Session, i *discordgo.Interacti
 	var attendList []string
 	for _, a := range attends {
 		raidName := a.RaidSchedule.Raid.RaidName
-		raidStartTime := a.RaidSchedule.StartTime.Format("2006-01-02 15:04")
+		raidStartTime := a.RaidSchedule.StartTime.In(loc).Format("2006-01-02 15:04")
 		raidTryCount := a.RaidSchedule.TryCount
 
 		// 다가오는 스케줄만 보여주기
-		if a.RaidSchedule.StartTime.After(time.Now().In(loc)) {
+		if a.RaidSchedule.StartTime.After(time.Now()) {
 			attendList = append(attendList, fmt.Sprintf("[%s] %s (%d트라이)", raidName, raidStartTime, raidTryCount))
 		}
 	}
@@ -236,10 +238,11 @@ func raidScheduleAdminInitialHandler(s *discordgo.Session, i *discordgo.Interact
 	var upcoming []string
 	for _, sc := range schedules {
 		raidName := sc.Raid.RaidName
-		raidStartTime := sc.StartTime.Format("2006-01-02 15:04")
+		raidStartTime := sc.StartTime.In(loc).Format("2006-01-02 15:04")
 		raidTryCount := sc.TryCount
+
 		// 24시간 이내 다가오는 스케줄 보여주기
-		if sc.StartTime.Before(time.Now().In(loc).AddDate(0, 0, 1)) {
+		if sc.StartTime.After(time.Now()) {
 			upcoming = append(upcoming, fmt.Sprintf("* [%s] %s (%d트라이)", raidName, raidStartTime, raidTryCount))
 		}
 	}
@@ -319,10 +322,10 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			scheduleSelectionMap := make(map[string]string)
 			for _, sc := range schedules {
 				raidName := sc.Raid.RaidName
-				raidStartTime := sc.StartTime.Format("2006-01-02 15:04")
+				raidStartTime := sc.StartTime.In(loc).Format("2006-01-02 15:04")
 				raidTryCount := sc.TryCount
 				// 오늘 기준으로 3일 앞뒤 스케줄만 보여주기
-				if sc.StartTime.Before(time.Now().In(loc).AddDate(0, 0, 3)) && sc.StartTime.After(time.Now().In(loc).AddDate(0, 0, -3)) {
+				if sc.StartTime.Before(time.Now().AddDate(0, 0, 3)) && sc.StartTime.After(time.Now().AddDate(0, 0, -3)) {
 					scheduleSelectionMap[fmt.Sprintf("[%s] %s (%d트라이)", raidName, raidStartTime, raidTryCount)] = "admin-remove-schedule-select-schedule_" + fmt.Sprintf("%d", sc.ID)
 				}
 			}
@@ -338,7 +341,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			scheduleSelectionMap := make(map[string]string)
 			for _, sc := range schedules {
 				raidName := sc.Raid.RaidName
-				raidStartTime := sc.StartTime.Format("2006-01-02 15:04")
+				raidStartTime := sc.StartTime.In(loc).Format("2006-01-02 15:04")
 				raidTryCount := sc.TryCount
 				scheduleSelectionMap[fmt.Sprintf("[%s] %s (%d트라이)", raidName, raidStartTime, raidTryCount)] = "admin-edit-schedule-select-schedule_" + fmt.Sprintf("%d", sc.ID)
 			}
@@ -347,11 +350,11 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			var selectOptions []discordgo.SelectMenuOption
 			for _, sc := range schedules {
 				raidName := sc.Raid.RaidName
-				raidStartTime := sc.StartTime.Format("2006-01-02 15:04")
+				raidStartTime := sc.StartTime.In(loc).Format("2006-01-02 15:04")
 				raidTryCount := sc.TryCount
 
 				// 오늘 기준으로 3일 앞뒤 스케줄만 보여주기
-				if sc.StartTime.Before(time.Now().In(loc).AddDate(0, 0, 3)) && sc.StartTime.After(time.Now().In(loc).AddDate(0, 0, -3)) {
+				if sc.StartTime.Before(time.Now().AddDate(0, 0, 3)) && sc.StartTime.After(time.Now().AddDate(0, 0, -3)) {
 					selectOptions = append(selectOptions, discordgo.SelectMenuOption{
 						Label: fmt.Sprintf("[%s] %s (%d트라이)", raidName, raidStartTime, raidTryCount),
 						Value: fmt.Sprintf("%d", sc.ID),
@@ -419,11 +422,11 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			var selectOptions []discordgo.SelectMenuOption
 			for _, sc := range schedules {
 				raidName := sc.Raid.RaidName
-				raidStartTime := sc.StartTime.Format("2006-01-02 15:04")
+				raidStartTime := sc.StartTime.In(loc).Format("2006-01-02 15:04")
 				raidTryCount := sc.TryCount
 
 				// 곧 진행될 스케줄 만 보여주기
-				if sc.StartTime.After(time.Now().In(loc)) {
+				if sc.StartTime.After(time.Now()) {
 					selectOptions = append(selectOptions, discordgo.SelectMenuOption{
 						Label: fmt.Sprintf("[%s] %s (%d트라이)", raidName, raidStartTime, raidTryCount),
 						Value: fmt.Sprintf("%d", sc.ID),
@@ -496,7 +499,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("**[%s] %s (%d 트라이) 참가자 목록**\n%s",
 						schedule.Raid.RaidName,
-						schedule.StartTime.Format("2006-01-02 15:04"),
+						schedule.StartTime.In(loc).Format("2006-01-02 15:04"),
 						schedule.TryCount,
 						attendListStr),
 					Components: []discordgo.MessageComponent{
@@ -561,11 +564,11 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				}
 
 				raidName := sc.Raid.RaidName
-				raidStartTime := sc.StartTime.Format("2006-01-02 15:04")
+				raidStartTime := sc.StartTime.In(loc).Format("2006-01-02 15:04")
 				raidTryCount := sc.TryCount
 
 				// subscriptionEndTime이 지나지 않은 스케줄만 보여주기
-				if sc.SubscriptionEndTime.After(time.Now().In(loc)) {
+				if sc.SubscriptionEndTime.After(time.Now()) {
 					selectOptions = append(selectOptions, discordgo.SelectMenuOption{
 						Label: fmt.Sprintf("[%s] %s (%d트라이)", raidName, raidStartTime, raidTryCount),
 						Value: fmt.Sprintf("%d", sc.ID),
@@ -639,7 +642,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 					Data: &discordgo.InteractionResponseData{
 						Flags: discordgo.MessageFlagsEphemeral,
 						Content: fmt.Sprintf("[%s] %s (%d 트라이) 에 이미 참가하고 있습니다.",
-							schedule.Raid.RaidName, schedule.StartTime.Format("2006-01-02 15:04"), schedule.TryCount),
+							schedule.Raid.RaidName, schedule.StartTime.In(loc).Format("2006-01-02 15:04"), schedule.TryCount),
 					},
 				})
 				return
@@ -661,7 +664,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				Type: discordgo.InteractionResponseUpdateMessage,
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("[%s] %s (%d 트라이) 참가 신청이 완료되었습니다.",
-						schedule.Raid.RaidName, schedule.StartTime.Format("2006-01-02 15:04"), schedule.TryCount),
+						schedule.Raid.RaidName, schedule.StartTime.In(loc).Format("2006-01-02 15:04"), schedule.TryCount),
 				},
 			})
 		case "user-cancel-schedule":
@@ -682,11 +685,11 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			var selectOptions []discordgo.SelectMenuOption
 			for _, a := range attends {
 				raidName := a.RaidSchedule.Raid.RaidName
-				raidStartTime := a.RaidSchedule.StartTime.Format("2006-01-02 15:04")
+				raidStartTime := a.RaidSchedule.StartTime.In(loc).Format("2006-01-02 15:04")
 				raidTryCount := a.RaidSchedule.TryCount
 
 				// subscriptionEndTime이 지나지 않은 스케줄만 보여주기
-				if a.RaidSchedule.SubscriptionEndTime.After(time.Now().In(loc)) {
+				if a.RaidSchedule.SubscriptionEndTime.After(time.Now()) {
 					selectOptions = append(selectOptions, discordgo.SelectMenuOption{
 						Label: fmt.Sprintf("[%s] %s (%d트라이)", raidName, raidStartTime, raidTryCount),
 						Value: fmt.Sprintf("%d", a.ID),
@@ -743,7 +746,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 					Data: &discordgo.InteractionResponseData{
 						Flags: discordgo.MessageFlagsEphemeral,
 						Content: fmt.Sprintf("[%s] %s (%d 트라이) 참가 신청 내역이 없습니다.",
-							attend.RaidSchedule.Raid.RaidName, attend.RaidSchedule.StartTime.Format("2006-01-02 15:04"), attend.RaidSchedule.TryCount),
+							attend.RaidSchedule.Raid.RaidName, attend.RaidSchedule.StartTime.In(loc).Format("2006-01-02 15:04"), attend.RaidSchedule.TryCount),
 					},
 				})
 				return
@@ -757,7 +760,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				Type: discordgo.InteractionResponseUpdateMessage,
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("[%s] %s (%d 트라이) 참가 신청이 취소되었습니다.",
-						attend.RaidSchedule.Raid.RaidName, attend.RaidSchedule.StartTime.Format("2006-01-02 15:04"), attend.RaidSchedule.TryCount),
+						attend.RaidSchedule.Raid.RaidName, attend.RaidSchedule.StartTime.In(loc).Format("2006-01-02 15:04"), attend.RaidSchedule.TryCount),
 				},
 			})
 		case "admin-edit-attendance-remove-select-attendee":
@@ -793,7 +796,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				Type: discordgo.InteractionResponseUpdateMessage,
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("[%s] %s (%d 트라이)에서 참가자(%s)가 삭제되었습니다.",
-						attend.RaidSchedule.Raid.RaidName, attend.RaidSchedule.StartTime.Format("2006-01-02 15:04"), attend.RaidSchedule.TryCount,
+						attend.RaidSchedule.Raid.RaidName, attend.RaidSchedule.StartTime.In(loc).Format("2006-01-02 15:04"), attend.RaidSchedule.TryCount,
 						attend.Nickname),
 				},
 			})
@@ -808,7 +811,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 			var selectOptions []discordgo.SelectMenuOption
 			for _, sc := range schedules {
 				raidName := sc.Raid.RaidName
-				raidStartTime := sc.StartTime.Format("2006-01-02 15:04")
+				raidStartTime := sc.StartTime.In(loc).Format("2006-01-02 15:04")
 				raidTryCount := sc.TryCount
 
 				selectOptions = append(selectOptions, discordgo.SelectMenuOption{
@@ -877,7 +880,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				// create message
 				msg, err := s.ChannelMessageSend(environment.DiscordGuildRaidInfoChannelID,
 					fmt.Sprintf("**[%s] %s - %d트라이**",
-						schedule.Raid.RaidName, schedule.StartTime.Format("2006-01-02"), schedule.TryCount))
+						schedule.Raid.RaidName, schedule.StartTime.In(loc).Format("2006-01-02"), schedule.TryCount))
 				if err != nil {
 					panic(err)
 				}
@@ -999,7 +1002,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		attendCount := len(attends)
 
 		// update info
-		info.EntranceTime = time.Now().In(loc)
+		info.EntranceTime = time.Now().UTC()
 		rdb.Save(&info)
 
 		// send message
@@ -1020,7 +1023,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		attendCount := len(attends)
 
 		// update info
-		info.StartTime = time.Now().In(loc)
+		info.StartTime = time.Now().UTC()
 		rdb.Save(&info)
 
 		// send message
@@ -1041,7 +1044,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		attendCount := len(attends)
 
 		// update info
-		info.EndTime = time.Now().In(loc)
+		info.EndTime = time.Now().UTC()
 		rdb.Save(&info)
 
 		// send message
@@ -1154,11 +1157,11 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 		if err != nil {
 			return
 		}
-		t, err := time.Parse("2006-01-02 15:04", startTime)
+		t, err := time.ParseInLocation("2006-01-02 15:04", startTime, loc)
 		if err != nil {
 			return
 		}
-		te, err := time.Parse("2006-01-02 15:04", subscriptionEndTime)
+		te, err := time.ParseInLocation("2006-01-02 15:04", subscriptionEndTime, loc)
 		if err != nil {
 			return
 		}
@@ -1173,8 +1176,8 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 		newRaidSchedule := model.RaidSchedule{
 			RaidID:              raid.ID,
 			TryCount:            raidCountInt,
-			StartTime:           t,
-			SubscriptionEndTime: te,
+			StartTime:           t.UTC(),
+			SubscriptionEndTime: te.UTC(),
 			MessageID:           m.ID,
 		}
 
@@ -1220,13 +1223,13 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 			return
 		}
 
-		t, err := time.Parse("2006-01-02 15:04", startTime)
+		t, err := time.ParseInLocation("2006-01-02 15:04", startTime, loc)
 		if err != nil {
 			return
 		}
 
 		schedule.TryCount = raidCountInt
-		schedule.StartTime = t
+		schedule.StartTime = t.UTC()
 		rdb.Save(&schedule)
 
 		// send message
