@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/sokdak/eternity-bot/pkg/model"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -146,19 +147,19 @@ func SendNewRaidScheduleModal(s *discordgo.Session, i *discordgo.Interaction, ra
 
 var loc, _ = time.LoadLocation("Asia/Seoul")
 
-func SendEditRaidScheduleModal(s *discordgo.Session, i *discordgo.Interaction, raidID string) {
+func SendEditRaidScheduleModal(s *discordgo.Session, i *discordgo.Interaction, schedule model.RaidSchedule) {
 	err := s.InteractionRespond(i, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
 			Title:    "일정 수정",
-			CustomID: "edit-raid-schedule-modal_" + raidID,
+			CustomID: fmt.Sprintf("edit-raid-schedule-modal_%d", schedule.ID),
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
 						discordgo.TextInput{
 							CustomID:    "start-time",
 							Placeholder: "2025-01-02 21:00",
-							Value:       time.Now().In(loc).Format("2006-01-02 15:04"),
+							Value:       schedule.StartTime.In(loc).Format("2006-01-02 15:04"),
 							Label:       "시작 날짜 및 시간",
 							Required:    true,
 							Style:       discordgo.TextInputShort,
@@ -170,7 +171,7 @@ func SendEditRaidScheduleModal(s *discordgo.Session, i *discordgo.Interaction, r
 						discordgo.TextInput{
 							CustomID:    "subscription-end-time",
 							Placeholder: "2025-01-02 21:00",
-							Value:       time.Now().In(loc).Format("2006-01-02 15:04"),
+							Value:       schedule.SubscriptionEndTime.In(loc).Format("2006-01-02 15:04"),
 							Label:       "모집 마감 날짜 및 시간",
 							Required:    true,
 							Style:       discordgo.TextInputShort,
@@ -182,6 +183,7 @@ func SendEditRaidScheduleModal(s *discordgo.Session, i *discordgo.Interaction, r
 						discordgo.TextInput{
 							CustomID:    "try-count",
 							Label:       "트라이",
+							Value:       strconv.Itoa(schedule.TryCount),
 							Placeholder: "1",
 							Required:    true,
 							Style:       discordgo.TextInputShort,
