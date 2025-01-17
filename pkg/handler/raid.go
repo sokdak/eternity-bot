@@ -171,7 +171,7 @@ func UnregisterCommands(s *discordgo.Session) {
 	//}
 }
 
-func raidScheduleUserInitialHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func raidScheduleUserInitialHandler(s *discordgo.Session, i *discordgo.InteractionCreate, update bool) {
 	memberInfo := cache.GetGuildMember(i.User.ID)
 	if memberInfo == nil {
 		return
@@ -205,8 +205,13 @@ func raidScheduleUserInitialHandler(s *discordgo.Session, i *discordgo.Interacti
 		msg += "\n"
 	}
 
+	respType := discordgo.InteractionResponseChannelMessageWithSource
+	if update {
+		respType = discordgo.InteractionResponseUpdateMessage
+	}
+
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Type: respType,
 		Data: &discordgo.InteractionResponseData{
 			Content: msg,
 			Components: []discordgo.MessageComponent{
@@ -229,7 +234,7 @@ func raidScheduleUserInitialHandler(s *discordgo.Session, i *discordgo.Interacti
 	})
 }
 
-func raidScheduleAdminInitialHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func raidScheduleAdminInitialHandler(s *discordgo.Session, i *discordgo.InteractionCreate, update bool) {
 	// list schedules
 	var schedules []model.RaidSchedule
 	rdb.Preload("Raid").Find(&schedules)
@@ -254,8 +259,13 @@ func raidScheduleAdminInitialHandler(s *discordgo.Session, i *discordgo.Interact
 		msg += "\n\n"
 	}
 
+	respType := discordgo.InteractionResponseChannelMessageWithSource
+	if update {
+		respType = discordgo.InteractionResponseUpdateMessage
+	}
+
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Type: respType,
 		Data: &discordgo.InteractionResponseData{
 			Content: msg,
 			Components: []discordgo.MessageComponent{
@@ -297,6 +307,10 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 	args := strings.Split(actionID, "_")
 	if len(args) == 1 {
 		switch args[0] {
+		case "user-landing-page":
+			raidScheduleUserInitialHandler(s, i, true)
+		case "admin-landing-page":
+			raidScheduleAdminInitialHandler(s, i, true)
 		case "admin-add-new-raid":
 			discord.SendNewRaidModal(s, i.Interaction)
 		case "admin-add-schedule":
@@ -310,6 +324,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				raidSelectionMap[r.RaidName] = "admin-add-schedule-select-raid_" + fmt.Sprintf("%d", r.ID)
 			}
 			raidSelectionMap["새로운 레이드 추가"] = "admin-add-new-raid"
+			raidSelectionMap["처음으로 돌아가기"] = "admin-landing-page"
 
 			// send message
 			discord.SendInteractionWithButtons(s, i.Interaction, "추가 할 레이드 일정을 선택하세요.", raidSelectionMap, true)
@@ -388,6 +403,15 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 								},
 							},
 						},
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "처음으로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "admin-landing-page",
+								},
+							},
+						},
 					},
 				},
 			})
@@ -406,13 +430,13 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 
 			// get schedule
 			var schedule model.RaidSchedule
-			err := rdb.First(&schedule, scheduleID).Error
+			err := rdb.Preload("Raid").First(&schedule, scheduleID).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return
 			}
 
 			// modal
-			discord.SendEditRaidScheduleModal(s, i.Interaction, scheduleID)
+			discord.SendEditRaidScheduleModal(s, i.Interaction, schedule)
 		case "admin-edit-attendance":
 			// list schedules
 			var schedules []model.RaidSchedule
@@ -440,6 +464,17 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 					Data: &discordgo.InteractionResponseData{
 						Flags:   discordgo.MessageFlagsEphemeral,
 						Content: "참가자 관리 할 레이드 일정이 없습니다.",
+						Components: []discordgo.MessageComponent{
+							discordgo.ActionsRow{
+								Components: []discordgo.MessageComponent{
+									discordgo.Button{
+										Label:    "처음으로 돌아가기",
+										Style:    discordgo.PrimaryButton,
+										CustomID: "admin-landing-page",
+									},
+								},
+							},
+						},
 					},
 				})
 				return
@@ -457,6 +492,15 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 									CustomID:    "admin-edit-attendance-select-schedule",
 									Placeholder: "일정 선택",
 									Options:     selectOptions,
+								},
+							},
+						},
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "처음으로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "admin-landing-page",
 								},
 							},
 						},
@@ -513,7 +557,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 								discordgo.Button{
 									Label:    "미편성 처리",
 									Style:    discordgo.SecondaryButton,
-									CustomID: "admin-edit-attendance-specout_" + scheduleID,
+									CustomID: "admin-edit-attendance-cancel_" + scheduleID,
 								},
 								discordgo.Button{
 									Label:    "참가자 삭제",
@@ -581,7 +625,18 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 					Type: discordgo.InteractionResponseUpdateMessage,
 					Data: &discordgo.InteractionResponseData{
 						Flags:   discordgo.MessageFlagsEphemeral,
-						Content: "참가 할 수 있는 레이드 일정이 없습니다.\n참가신청 기한이 마감되었을 수 있으니 참가를 원하시면 공대장에게 문의해 주세요.",
+						Content: "참가 신청 가능한 레이드 일정이 없습니다.\n이미 모든 일정에 참가하고 있거나, 참가신청 기한이 마감되었을 수 있으니 참가를 원하시면 공대장에게 문의해 주세요.",
+						Components: []discordgo.MessageComponent{
+							discordgo.ActionsRow{
+								Components: []discordgo.MessageComponent{
+									discordgo.Button{
+										Label:    "처음으로 돌아가기",
+										Style:    discordgo.PrimaryButton,
+										CustomID: "user-landing-page",
+									},
+								},
+							},
+						},
 					},
 				})
 				return
@@ -665,6 +720,17 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("[%s] %s (%d 트라이) 참가 신청이 완료되었습니다.",
 						schedule.Raid.RaidName, schedule.StartTime.In(loc).Format("2006-01-02 15:04"), schedule.TryCount),
+					Components: []discordgo.MessageComponent{
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "참가 신청으로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "user-attend-schedule",
+								},
+							},
+						},
+					},
 				},
 			})
 		case "user-cancel-schedule":
@@ -703,6 +769,17 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 					Data: &discordgo.InteractionResponseData{
 						Flags:   discordgo.MessageFlagsEphemeral,
 						Content: "참가 취소할 레이드 일정이 없습니다.",
+						Components: []discordgo.MessageComponent{
+							discordgo.ActionsRow{
+								Components: []discordgo.MessageComponent{
+									discordgo.Button{
+										Label:    "처음으로 돌아가기",
+										Style:    discordgo.PrimaryButton,
+										CustomID: "user-landing-page",
+									},
+								},
+							},
+						},
 					},
 				})
 				return
@@ -720,6 +797,15 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 									CustomID:    "user-cancel-schedule-select-schedule",
 									Placeholder: "일정 선택",
 									Options:     selectOptions,
+								},
+							},
+						},
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "처음으로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "user-landing-page",
 								},
 							},
 						},
@@ -761,6 +847,17 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("[%s] %s (%d 트라이) 참가 신청이 취소되었습니다.",
 						attend.RaidSchedule.Raid.RaidName, attend.RaidSchedule.StartTime.In(loc).Format("2006-01-02 15:04"), attend.RaidSchedule.TryCount),
+					Components: []discordgo.MessageComponent{
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "취소 신청으로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "user-cancel-schedule",
+								},
+							},
+						},
+					},
 				},
 			})
 		case "admin-edit-attendance-remove-select-attendee":
@@ -843,6 +940,15 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 									CustomID:    "admin-manage-info-select-schedule",
 									Placeholder: "일정 선택",
 									Options:     selectOptions,
+								},
+							},
+						},
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "처음으로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "admin-landing-page",
 								},
 							},
 						},
@@ -931,6 +1037,63 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				Content: fmt.Sprintf("레이드 일정이 삭제되었습니다."),
 			},
 		})
+	case "admin-edit-attendance":
+		scheduleID := args[1]
+
+		// get schedule
+		var schedule model.RaidSchedule
+		err := rdb.Preload("Raid").First(&schedule, scheduleID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return
+		}
+
+		// get attendees
+		var attends []model.RaidAttend
+		rdb.Preload("MemberInfo").Where("raid_schedule_id = ?", scheduleID).Find(&attends)
+
+		// create user list
+		var attendList []string
+		for _, a := range attends {
+			attendList = append(attendList, fmt.Sprintf("%s / %d / %s", a.MemberInfo.SubRoleName, a.Level, a.Nickname))
+		}
+		attendListStr := strings.Join(attendList, "\n")
+
+		// send message
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseUpdateMessage,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("**[%s] %s (%d 트라이) 참가자 목록**\n%s",
+					schedule.Raid.RaidName,
+					schedule.StartTime.In(loc).Format("2006-01-02 15:04"),
+					schedule.TryCount,
+					attendListStr),
+				Components: []discordgo.MessageComponent{
+					discordgo.ActionsRow{
+						Components: []discordgo.MessageComponent{
+							discordgo.Button{
+								Label:    "참가자 추가",
+								Style:    discordgo.PrimaryButton,
+								CustomID: "admin-edit-attendance-add_" + scheduleID,
+							},
+							discordgo.Button{
+								Label:    "미편성 처리",
+								Style:    discordgo.SecondaryButton,
+								CustomID: "admin-edit-attendance-cancel_" + scheduleID,
+							},
+							discordgo.Button{
+								Label:    "참가자 삭제",
+								Style:    discordgo.DangerButton,
+								CustomID: "admin-edit-attendance-remove_" + scheduleID,
+							},
+						},
+					},
+				},
+			},
+		})
+
+		if err != nil {
+			panic(err)
+		}
 	case "admin-edit-attendance-remove":
 		scheduleID := args[1]
 
@@ -959,6 +1122,17 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				Type: discordgo.InteractionResponseUpdateMessage,
 				Data: &discordgo.InteractionResponseData{
 					Content: "삭제할 참가자가 없습니다.",
+					Components: []discordgo.MessageComponent{
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "참가자 관리로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "admin-edit-attendance_" + scheduleID,
+								},
+							},
+						},
+					},
 				},
 			})
 			return
@@ -977,6 +1151,15 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 								CustomID:    "admin-edit-attendance-remove-select-attendee",
 								Placeholder: "참가자 선택",
 								Options:     selectOptions,
+							},
+						},
+					},
+					discordgo.ActionsRow{
+						Components: []discordgo.MessageComponent{
+							discordgo.Button{
+								Label:    "참가자 관리로 돌아가기",
+								Style:    discordgo.PrimaryButton,
+								CustomID: "admin-edit-attendance_" + scheduleID,
 							},
 						},
 					},
@@ -1237,6 +1420,17 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: fmt.Sprintf("레이드 일정이 수정되었습니다."),
+				Components: []discordgo.MessageComponent{
+					discordgo.ActionsRow{
+						Components: []discordgo.MessageComponent{
+							discordgo.Button{
+								Label:    "일정 수정으로 돌아가기",
+								Style:    discordgo.PrimaryButton,
+								CustomID: "admin-edit-schedule",
+							},
+						},
+					},
+				},
 			},
 		})
 	case "admin-add-attendee-modal":
@@ -1295,7 +1489,7 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 							discordgo.Button{
 								Label:    "참가자 추가로 돌아가기",
 								Style:    discordgo.PrimaryButton,
-								CustomID: "admin-edit-attendance",
+								CustomID: "admin-edit-attendance_" + scheduleID,
 							},
 						},
 					},
@@ -1337,7 +1531,7 @@ func raidScheduleHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				return
 			}
 
-			raidScheduleUserInitialHandler(s, i)
+			raidScheduleUserInitialHandler(s, i, false)
 		case "레이드관리":
 			if i.ChannelID != environment.DiscordGuildRaidManageChannelID {
 				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -1349,7 +1543,7 @@ func raidScheduleHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				})
 				return
 			}
-			raidScheduleAdminInitialHandler(s, i)
+			raidScheduleAdminInitialHandler(s, i, false)
 		}
 	}
 
