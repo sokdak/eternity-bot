@@ -48,9 +48,10 @@ func RaidSubscriptionRefresh(dg *discordgo.Session) error {
 		// send message
 		var msg string
 
-		msg += fmt.Sprintf("**[%s] %s - %d트라이 (%s 출발) 신청인원**\n\n",
+		msg += fmt.Sprintf("**[%s] %s - %d트라이 (%s 출발) 신청인원**\n신청마감 기한 %s, 기한이 지난 뒤 신청하려면 문의\n\n",
 			sc.Raid.RaidName,
-			sc.StartTime.In(loc).Format("01월 02일"), sc.TryCount, sc.StartTime.In(loc).Format("15:04"))
+			sc.StartTime.In(loc).Format("01월 02일"), sc.TryCount, sc.StartTime.In(loc).Format("15:04"),
+			sc.SubscriptionEndTime.In(loc).Format("01월 02일 15:04"))
 
 		for _, k := range keys {
 			msg += fmt.Sprintf("**%s**\n", k)
@@ -563,6 +564,11 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 									Label:    "참가자 삭제",
 									Style:    discordgo.DangerButton,
 									CustomID: "admin-edit-attendance-remove_" + scheduleID,
+								},
+								discordgo.Button{
+									Label:    "일정 선택으로 돌아가기",
+									Style:    discordgo.SecondaryButton,
+									CustomID: "admin-edit-attendance",
 								},
 							},
 						},
@@ -1085,6 +1091,11 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 								Style:    discordgo.DangerButton,
 								CustomID: "admin-edit-attendance-remove_" + scheduleID,
 							},
+							discordgo.Button{
+								Label:    "일정 선택으로 돌아가기",
+								Style:    discordgo.SecondaryButton,
+								CustomID: "admin-edit-attendance",
+							},
 						},
 					},
 				},
@@ -1376,7 +1387,7 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 	case "edit-raid-schedule-modal":
 		modalData := i.ModalSubmitData().Components
 
-		var startTime, tryCount string
+		var startTime, sTime, tryCount string
 		for _, comp := range modalData {
 			if ar, ok := comp.(*discordgo.ActionsRow); ok {
 				if ti, ok := ar.Components[0].(*discordgo.TextInput); ok {
@@ -1385,6 +1396,9 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 					}
 					if ti.CustomID == "try-count" {
 						tryCount = ti.Value
+					}
+					if ti.CustomID == "subscription-end-time" {
+						sTime = ti.Value
 					}
 				}
 			}
@@ -1411,8 +1425,14 @@ func raidScheduleModalHandler(s *discordgo.Session, i *discordgo.InteractionCrea
 			return
 		}
 
+		ts, err := time.ParseInLocation("2006-01-02 15:04", sTime, loc)
+		if err != nil {
+			return
+		}
+
 		schedule.TryCount = raidCountInt
 		schedule.StartTime = t.UTC()
+		schedule.SubscriptionEndTime = ts.UTC()
 		rdb.Save(&schedule)
 
 		// send message
