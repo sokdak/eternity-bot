@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"github.com/dstotijn/go-notion"
 	"github.com/sokdak/eternity-bot/pkg/cache"
 	"github.com/sokdak/eternity-bot/pkg/discord"
 	"github.com/sokdak/eternity-bot/pkg/environment"
@@ -76,6 +77,108 @@ func RaidSubscriptionRefresh(dg *discordgo.Session) error {
 		if err != nil {
 			fmt.Println("failed to edit message:", err)
 			continue
+		}
+	}
+
+	return nil
+}
+
+func RaidRoleMappingRefresh(dg *discordgo.Session) error {
+	// get raidschedules
+	var schedules []model.RaidSchedule
+	rdb.Preload("Raid").Find(&schedules)
+
+	// check if schedule is before 3 and after 3 days
+	filteredSc := make([]model.RaidSchedule, 0)
+	for _, sc := range schedules {
+		if sc.StartTime.Before(time.Now().AddDate(0, 0, 3)) && sc.StartTime.After(time.Now().AddDate(0, 0, -3)) {
+			filteredSc = append(filteredSc, sc)
+		}
+	}
+
+	for _, sc := range filteredSc {
+		// get roles from discord
+		roleName := fmt.Sprintf("%s-%s-%d트라이", sc.Raid.RaidName, sc.StartTime.In(loc).Format("20060102"), sc.TryCount)
+
+		// get role
+		roleMap := cache.ListAllRoles()
+
+		// check if role exists
+		var roleID string
+		for name, id := range roleMap {
+			if name == roleName {
+				roleID = id
+				break
+			}
+		}
+
+		// create role
+		if roleID == "" {
+			roleParams := &discordgo.RoleParams{
+				Name:        roleName,
+				Mentionable: notion.BoolPtr(true),
+			}
+			newRole, err := dg.GuildRoleCreate(environment.DiscordGuildID, roleParams)
+			if err != nil {
+				fmt.Println("failed to create role:", err)
+				continue
+			}
+			roleID = newRole.ID
+
+			// save role id
+			sc.RoleID = roleID
+			rdb.Save(&sc)
+		}
+
+		// get attends
+		var attends []model.RaidAttend
+		rdb.Where("raid_schedule_id = ? AND canceled = ?", sc.ID, false).Find(&attends)
+
+		// assign role
+		for _, a := range attends {
+			nmap := cache.ListAllMembersNicknameMap()
+			m, ok := nmap[a.Nickname]
+			if !ok {
+				fmt.Println("failed to get member id from nickname")
+				continue
+			}
+
+			// check if member has role
+			hasRole := false
+			for _, r := range m.Roles {
+				if r == roleID {
+					hasRole = true
+					break
+				}
+			}
+
+			if !hasRole {
+				if err := dg.GuildMemberRoleAdd(environment.DiscordGuildID, m.User.ID, roleID); err != nil {
+					fmt.Println("failed to assign role:", err)
+					continue
+				}
+			}
+		}
+	}
+
+	// get inverted schedule
+	var outdatedScs []model.RaidSchedule
+	for _, sc := range schedules {
+		if !slices.Contains(filteredSc, sc) {
+			outdatedScs = append(outdatedScs, sc)
+		}
+	}
+
+	// remove role
+	for _, sc := range outdatedScs {
+		if sc.RoleID != "" {
+			if err := dg.GuildRoleDelete(environment.DiscordGuildID, sc.RoleID); err != nil {
+				fmt.Println("failed to delete role:", err)
+				continue
+			}
+
+			sc.RoleID = ""
+			rdb.Save(&sc)
 		}
 	}
 
@@ -184,7 +287,7 @@ func raidScheduleUserInitialHandler(s *discordgo.Session, i *discordgo.Interacti
 
 	// list my schedules
 	var attends []model.RaidAttend
-	rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").Where("mention = ?", m.Mention).Find(&attends)
+	rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").Where("mention = ? AND canceled = ?", m.Mention, false).Find(&attends)
 
 	var attendList []string
 	for _, a := range attends {
@@ -558,7 +661,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 								discordgo.Button{
 									Label:    "미편성 처리",
 									Style:    discordgo.SecondaryButton,
-									CustomID: "admin-edit-attendance-cancel_" + scheduleID,
+									CustomID: "admin-edit-attendance-specout_" + scheduleID,
 								},
 								discordgo.Button{
 									Label:    "참가자 삭제",
@@ -660,6 +763,15 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 									CustomID:    "user-attend-schedule-select-schedule",
 									Placeholder: "일정 선택",
 									Options:     selectOptions,
+								},
+							},
+						},
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "처음으로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "user-landing-page",
 								},
 							},
 						},
@@ -901,6 +1013,74 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 					Content: fmt.Sprintf("[%s] %s (%d 트라이)에서 참가자(%s)가 삭제되었습니다.",
 						attend.RaidSchedule.Raid.RaidName, attend.RaidSchedule.StartTime.In(loc).Format("2006-01-02 15:04"), attend.RaidSchedule.TryCount,
 						attend.Nickname),
+					Components: []discordgo.MessageComponent{
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "참가자 관리로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "admin-edit-attendance_" + fmt.Sprintf("%d", attend.RaidScheduleID),
+								},
+							},
+						},
+					},
+				},
+			})
+		case "admin-edit-attendance-specout-select-attendee":
+			selectMenuValues := i.MessageComponentData().Values
+
+			if len(selectMenuValues) > 1 {
+				return
+			}
+
+			attendeeID := selectMenuValues[0]
+
+			// get attendee
+			var attend model.RaidAttend
+			err := rdb.Preload("RaidSchedule").Preload("RaidSchedule.Raid").First(&attend, attendeeID).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseUpdateMessage,
+					Data: &discordgo.InteractionResponseData{
+						Content: "참가자 정보를 찾을 수 없습니다.",
+						Components: []discordgo.MessageComponent{
+							discordgo.ActionsRow{
+								Components: []discordgo.MessageComponent{
+									discordgo.Button{
+										Label:    "참가자 관리로 돌아가기",
+										Style:    discordgo.PrimaryButton,
+										CustomID: "admin-edit-attendance",
+									},
+								},
+							},
+						},
+					},
+				})
+				return
+			}
+
+			// update attendee
+			attend.Canceled = true
+			rdb.Save(&attend)
+
+			// send message
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseUpdateMessage,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("[%s] %s (%d 트라이)에서 참가자(%s)가 미편성 처리되었습니다.",
+						attend.RaidSchedule.Raid.RaidName, attend.RaidSchedule.StartTime.In(loc).Format("2006-01-02 15:04"), attend.RaidSchedule.TryCount,
+						attend.Nickname),
+					Components: []discordgo.MessageComponent{
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "참가자 관리로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "admin-edit-attendance_" + fmt.Sprintf("%d", attend.RaidScheduleID),
+								},
+							},
+						},
+					},
 				},
 			})
 		case "admin-manage-info":
@@ -1055,7 +1235,7 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 
 		// get attendees
 		var attends []model.RaidAttend
-		rdb.Preload("MemberInfo").Where("raid_schedule_id = ?", scheduleID).Find(&attends)
+		rdb.Where("raid_schedule_id = ?", scheduleID).Find(&attends)
 
 		// create user list
 		var attendList []string
@@ -1180,6 +1360,78 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 	case "admin-edit-attendance-add":
 		scheduleID := args[1]
 		discord.SendAdminAddAttendeeModal(s, i.Interaction, scheduleID)
+	case "admin-edit-attendance-specout":
+		scheduleID := args[1]
+
+		// get schedule
+		var schedule model.RaidSchedule
+		err := rdb.First(&schedule, scheduleID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return
+		}
+
+		// get attendees
+		var attends []model.RaidAttend
+		rdb.Where("raid_schedule_id = ?", scheduleID).Find(&attends)
+
+		// create selects
+		var selectOptions []discordgo.SelectMenuOption
+		for _, a := range attends {
+			selectOptions = append(selectOptions, discordgo.SelectMenuOption{
+				Label: fmt.Sprintf("%s / %d / %s", a.SubRoleName, a.Level, a.Nickname),
+				Value: fmt.Sprintf("%d", a.ID),
+			})
+		}
+
+		if len(selectOptions) == 0 {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseUpdateMessage,
+				Data: &discordgo.InteractionResponseData{
+					Content: "미편성 처리할 참가자가 없습니다.",
+					Components: []discordgo.MessageComponent{
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{
+								discordgo.Button{
+									Label:    "참가자 관리로 돌아가기",
+									Style:    discordgo.PrimaryButton,
+									CustomID: "admin-edit-attendance_" + scheduleID,
+								},
+							},
+						},
+					},
+				},
+			})
+			return
+		}
+
+		// send message
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseUpdateMessage,
+			Data: &discordgo.InteractionResponseData{
+				Content:  "미편성 처리할 참가자를 선택하세요.",
+				CustomID: "admin-edit-attendance-specout-select-attendee_" + scheduleID,
+				Components: []discordgo.MessageComponent{
+					discordgo.ActionsRow{
+						Components: []discordgo.MessageComponent{
+							discordgo.SelectMenu{
+								CustomID:    "admin-edit-attendance-specout-select-attendee",
+								Placeholder: "참가자 선택",
+								Options:     selectOptions,
+							},
+						},
+					},
+					discordgo.ActionsRow{
+						Components: []discordgo.MessageComponent{
+							discordgo.Button{
+								Label:    "참가자 관리로 돌아가기",
+								Style:    discordgo.PrimaryButton,
+								CustomID: "admin-edit-attendance_" + scheduleID,
+							},
+						},
+					},
+				},
+			},
+		})
 	case "admin-info-record-entrance":
 		infoID := args[1]
 
@@ -1256,7 +1508,6 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 		// get attend
 		var attends []model.RaidAttend
 		rdb.Where("raid_schedule_id = ? AND canceled = ?", info.RaidScheduleID, false).Find(&attends)
-
 	}
 }
 

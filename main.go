@@ -54,7 +54,7 @@ func main() {
 	defer dg.Close()
 
 	// Run cache eviction policy
-	cache.RunDiscordCacheEvictionPolicy(dg, 6*time.Hour, 10*time.Minute)
+	cache.RunDiscordCacheEvictionPolicy(dg, 10*time.Minute, 10*time.Minute)
 
 	n := notion.NewClient(environment.NotionBotAPIKey)
 	if n == nil {
@@ -79,6 +79,9 @@ func main() {
 
 	shortTermTicker := time.NewTicker(5 * time.Minute)
 	defer shortTermTicker.Stop()
+
+	littleMidTermTicker := time.NewTicker(15 * time.Minute)
+	defer littleMidTermTicker.Stop()
 
 	midTermTicker := time.NewTicker(30 * time.Minute)
 	defer midTermTicker.Stop()
@@ -111,6 +114,10 @@ func main() {
 			}
 			if err := handler.PollFinishChecker(dg); err != nil {
 				fmt.Println("Error checking poll finish:", err)
+			}
+		case <-littleMidTermTicker.C:
+			if err := handler.RaidRoleMappingRefresh(dg); err != nil {
+				fmt.Println("Error refreshing raid role mapping:", err)
 			}
 		case <-midTermTicker.C:
 			err := handler.UpdateMessageWithRoles(dg,

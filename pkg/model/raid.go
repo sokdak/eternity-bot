@@ -21,6 +21,7 @@ type RaidSchedule struct {
 	SubscriptionEndTime time.Time
 	StartTime           time.Time
 	MessageID           string
+	RoleID              string
 }
 
 type RaidAttend struct {
