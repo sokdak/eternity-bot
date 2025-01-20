@@ -159,6 +159,44 @@ func RaidRoleMappingRefresh(dg *discordgo.Session) error {
 				}
 			}
 		}
+
+		// remove outdated members from role
+		members, err := dg.GuildMembers(environment.DiscordGuildID, "", 1000)
+		if err != nil {
+			fmt.Println("failed to get members:", err)
+			continue
+		}
+
+		// remove role who is not participating now
+		for _, m := range members {
+			hasRole := false
+			for _, r := range m.Roles {
+				if r == roleID {
+					hasRole = true
+					break
+				}
+			}
+
+			if !hasRole {
+				continue
+			}
+
+			// check if member is in attend list
+			isAttend := false
+			for _, a := range attends {
+				if a.Mention == m.User.Mention() {
+					isAttend = true
+					break
+				}
+			}
+
+			if !isAttend {
+				if err := dg.GuildMemberRoleRemove(environment.DiscordGuildID, m.User.ID, roleID); err != nil {
+					fmt.Println("failed to remove role:", err)
+					continue
+				}
+			}
+		}
 	}
 
 	// get inverted schedule
