@@ -87,6 +87,10 @@ func HandlePersistLastActivityTime() error {
 				return fmt.Errorf("failed to query database: %w", result.Error)
 			}
 		} else {
+			// upgrade for subrolename 4th job
+			if memberInfo.SubRoleName != info.SubRoleName {
+				memberInfo.SubRoleName = info.SubRoleName
+			}
 			if memberInfo.Level != info.Level {
 				memberInfo.Level = info.Level
 			}

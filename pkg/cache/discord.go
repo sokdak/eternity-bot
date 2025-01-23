@@ -14,7 +14,7 @@ var guildMembersCache = make(map[string]*discordgo.Member)
 var roleCacheLock = sync.Mutex{}
 var memberCacheLock = sync.Mutex{}
 
-var roleList = []string{"용기사", "크루세이더", "나이트", "레인저", "저격수", "썬콜", "불독", "프리스트", "허밋", "시프마스터"}
+var roleList = []string{"다크나이트", "히어로", "팔라딘", "보우마스터", "신궁", "아크메이지(썬,콜)", "아크메이지(불,독)", "비숍", "나이트로드", "섀도어"}
 
 func RunDiscordCacheEvictionPolicy(s *discordgo.Session, roleCachingPeriod time.Duration, memberCachingPeriod time.Duration) {
 	rcp := time.NewTicker(roleCachingPeriod)
