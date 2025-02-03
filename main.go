@@ -74,6 +74,11 @@ func main() {
 	}
 	defer handler.RaidFinalize()
 
+	if err := handler.ModUserInit(dg); err != nil {
+		fmt.Println("Error initializing mod user:", err)
+		return
+	}
+
 	veryShortTermTicker := time.NewTicker(15 * time.Second)
 	defer veryShortTermTicker.Stop()
 
