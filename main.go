@@ -79,6 +79,11 @@ func main() {
 		return
 	}
 
+	if err := handler.Counsel2Init(dg, n, environment.NotionCounselDBID); err != nil {
+		fmt.Println("Error initializing counsel2:", err)
+		return
+	}
+
 	veryShortTermTicker := time.NewTicker(15 * time.Second)
 	defer veryShortTermTicker.Stop()
 

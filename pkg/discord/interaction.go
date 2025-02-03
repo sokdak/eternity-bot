@@ -280,3 +280,62 @@ func SendAdminRaidInfoResponse(s *discordgo.Session, i *discordgo.Interaction, s
 
 	return nil
 }
+
+func SendCounselModal(s *discordgo.Session, i *discordgo.Interaction) {
+	err := s.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseModal,
+		Data: &discordgo.InteractionResponseData{
+			Title:    "건의사항 제출",
+			CustomID: "counsel-modal",
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    "counsel-privacy",
+							Label:       "공개 여부",
+							Style:       discordgo.TextInputShort,
+							Placeholder: "실명 or 익명",
+							Required:    true,
+						},
+					},
+				},
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    "counsel-category",
+							Label:       "카테고리",
+							Style:       discordgo.TextInputShort,
+							Placeholder: "제안/신고/버그/기타",
+							Required:    true,
+						},
+					},
+				},
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    "counsel-title",
+							Label:       "제목",
+							Style:       discordgo.TextInputShort,
+							Placeholder: "제목을 입력하세요",
+							Required:    true,
+						},
+					},
+				},
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    "counsel-content",
+							Label:       "내용",
+							Style:       discordgo.TextInputParagraph,
+							Placeholder: "상세 내용을 입력해주세요. (생략 가능)",
+						},
+					},
+				},
+			},
+		},
+	})
+
+	if err != nil {
+		panic(err)
+	}
+}
