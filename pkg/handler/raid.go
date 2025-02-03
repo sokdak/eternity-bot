@@ -487,6 +487,27 @@ func raidScheduleIntegratedHandler(s *discordgo.Session, i *discordgo.Interactio
 				}
 			}
 
+			if len(scheduleSelectionMap) == 0 {
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseUpdateMessage,
+					Data: &discordgo.InteractionResponseData{
+						Content: "삭제 할 레이드 일정이 없습니다.",
+						Components: []discordgo.MessageComponent{
+							discordgo.ActionsRow{
+								Components: []discordgo.MessageComponent{
+									discordgo.Button{
+										Label:    "처음으로 돌아가기",
+										Style:    discordgo.PrimaryButton,
+										CustomID: "admin-landing-page",
+									},
+								},
+							},
+						},
+					},
+				})
+				return
+			}
+
 			// send message
 			discord.SendInteractionWithButtons(s, i.Interaction, "삭제 할 레이드 일정을 선택하세요.", scheduleSelectionMap, true)
 		case "admin-edit-schedule":
