@@ -118,7 +118,7 @@ func createPage(n *notion.Client, parentID, authorNick, contentID, content strin
 				Title: []notion.RichText{
 					{
 						Text: &notion.Text{
-							Content: fmt.Sprintf("%s님 건의사항 (%s)", authorNick, time.Now().Format("060102 15:04:05")),
+							Content: fmt.Sprintf("%s님 건의사항 (%s)", authorNick, time.Now().In(loc).Format("060102 15:04:05")),
 						},
 					},
 				},

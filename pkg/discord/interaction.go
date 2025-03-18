@@ -292,9 +292,9 @@ func SendCounselModal(s *discordgo.Session, i *discordgo.Interaction) {
 					Components: []discordgo.MessageComponent{
 						discordgo.TextInput{
 							CustomID:    "counsel-privacy",
-							Label:       "공개 여부",
+							Label:       "실명/익명 여부",
 							Style:       discordgo.TextInputShort,
-							Placeholder: "실명 or 익명",
+							Placeholder: "실명, 익명",
 							Required:    true,
 						},
 					},
@@ -305,7 +305,7 @@ func SendCounselModal(s *discordgo.Session, i *discordgo.Interaction) {
 							CustomID:    "counsel-category",
 							Label:       "카테고리",
 							Style:       discordgo.TextInputShort,
-							Placeholder: "제안/신고/버그/기타",
+							Placeholder: "제안, 신고, 버그, 기타",
 							Required:    true,
 						},
 					},

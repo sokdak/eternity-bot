@@ -105,7 +105,7 @@ func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) e
 	loc, _ := time.LoadLocation("Asia/Seoul")
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**[⚒️ 직업 별 길드원 분포 ⚒️]** (%s 기준)\n", time.Now().In(loc).Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("**[직업 별 길드원 분포]** (%s 기준)\n", time.Now().In(loc).Format("2006-01-02 15:04:05")))
 	memberCount := 0
 
 	// using ms instead of roleMembers
@@ -119,12 +119,12 @@ func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) e
 			currentMainRole = mk.MainRoleName
 			currentSubRole = mk.SubRoleName
 
-			sb.WriteString(fmt.Sprintf("\n**%s** (%d명 / 평렙 %.1f)\n", mk.MainRoleName, mainroleCount[mk.MainRoleName], mainroleAverageLevel[mk.MainRoleName]))
-			sb.WriteString(fmt.Sprintf("- **%s** (%d명 / 평렙 %.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
+			sb.WriteString(fmt.Sprintf("\n**%s** (%d / 평%.1f)\n", mk.MainRoleName, mainroleCount[mk.MainRoleName], mainroleAverageLevel[mk.MainRoleName]))
+			sb.WriteString(fmt.Sprintf("- **%s** (%d / 평%.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
 			sb.WriteString(mk.Mention + " ")
 		} else if currentSubRole != mk.SubRoleName {
 			currentSubRole = mk.SubRoleName
-			sb.WriteString(fmt.Sprintf("\n- **%s** (%d명 / 평렙 %.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
+			sb.WriteString(fmt.Sprintf("\n- **%s** (%d / 평%.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
 			sb.WriteString(mk.Mention + " ")
 		} else {
 			sb.WriteString(mk.Mention + " ")
