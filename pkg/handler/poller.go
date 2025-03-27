@@ -817,7 +817,87 @@ func sendMessage(dg *discordgo.Session, userID, message string) {
 		fmt.Println("failed to create user channel: %w", err)
 		return
 	}
+	if len(message) > 2000 {
+		_ = sendSplitMessage(dg, c.ID, message)
+		return
+	}
 	_, _ = dg.ChannelMessageSend(c.ID, message)
+}
+
+func sendSplitMessage(s *discordgo.Session, channelID, content string) error {
+	lines := strings.Split(content, "\n")
+
+	var sb strings.Builder // 현재 메시지 조각을 누적할 버퍼
+	inCodeBlock := false   // 코드 블록(```)이 현재 열려 있는지 여부 추적
+
+	// chunk(조각)를 실제로 Discord에 전송하는 함수
+	sendChunk := func() error {
+		if sb.Len() == 0 {
+			return nil
+		}
+
+		// 만약 코드 블록이 열려 있는 상태라면, 현 메시지의 끝에서 먼저 닫아 준다
+		msg := sb.String()
+		if inCodeBlock {
+			msg += "\n```"
+		}
+
+		_, err := s.ChannelMessageSend(channelID, msg)
+		if err != nil {
+			return err
+		}
+
+		// 전송 후, sb를 비워 준다
+		sb.Reset()
+
+		// 방금까지 코드 블록이 열려 있었다면, 새 메시지의 시작에서 다시 ```로 열어 준다
+		if inCodeBlock {
+			sb.WriteString("```")
+		}
+
+		return nil
+	}
+
+	for i, line := range lines {
+		// 이 라인을 추가했을 때 2000자 제한을 넘는지 미리 확인
+		// 코드 블록이 열려 있으면, 메시지 끝에서 \n``` 를 추가해야 하므로 그 길이도 약간 고려
+		// (간단화를 위해 대략적인 계산만 수행)
+		overhead := 0
+		if inCodeBlock {
+			// 끝에서 ```(3) + \n(1) = 4글자 추가로 들어갈 수 있으니 여유 공간을 생각
+			overhead += 4
+		}
+
+		// +1은 현재 버퍼에 들어갈 newline(\n) 용도
+		if sb.Len()+len(line)+1+overhead > 2000 {
+			// 이미 채워 놓은 chunk를 먼저 보낸다
+			if err := sendChunk(); err != nil {
+				return err
+			}
+		}
+
+		// 보낼 chunk에 현재 줄을 추가
+		// (이미 무언가 있다면 줄바꿈 후 추가)
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(line)
+
+		// 현재 줄(line)에 ```가 몇 번 등장하는지 찾아서, 그만큼 코드 블록 상태를 토글
+		count := strings.Count(line, "```")
+		for c := 0; c < count; c++ {
+			inCodeBlock = !inCodeBlock
+		}
+
+		// 마지막 줄이라면, 남은 chunk를 최종 전송
+		if i == len(lines)-1 {
+			if err := sendChunk(); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func sendGuildMessage(dg *discordgo.Session, channelID, message string) {
