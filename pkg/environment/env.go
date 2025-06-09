@@ -8,7 +8,9 @@ var (
 
 	DiscordGuildInfoChannelID             = lookupEnv("DISCORD_GI_CHANNEL_ID", "fake")
 	DiscordGuildInfoByRoleMessageID       = lookupEnv("DISCORD_GIBR_MESSAGE_ID", "fake")
+	DiscordGuildInfoByRoleMessageID2      = lookupEnv("DISCORD_GIBR_MESSAGE_ID2", "fake")
 	DiscordGuildInfoByLevelMessageID      = lookupEnv("DISCORD_GIBL_MESSAGE_ID", "fake")
+	DiscordGuildInfoByLevelMessageID2     = lookupEnv("DISCORD_GIBL_MESSAGE_ID2", "fake")
 	DiscordCounselChannelID               = lookupEnv("DISCORD_COUNSEL_CHANNEL_ID", "fake")
 	DiscordGuildPollChannelID             = lookupEnv("DISCORD_GP_CHANNEL_ID", "fake")
 	DiscordGuildRaidSubscriptionChannelID = lookupEnv("DISCORD_GRSC_CHANNEL_ID", "fake")
@@ -18,9 +20,10 @@ var (
 	NotionBotAPIKey   = lookupEnv("NOTION_BOT_API_KEY", "fake")
 	NotionCounselDBID = lookupEnv("NOTION_COUNSEL_DB_ID", "fake")
 
-	PollSQLiteDBPath     = lookupEnv("POLL_SQLITE_DB_PATH", "poller.db")
-	ActivitySQLiteDBPath = lookupEnv("ACTIVITY_SQLITE_DB_PATH", "activity.db")
-	RaidSQLiteDBPath     = lookupEnv("RAID_SQLITE_DB_PATH", "raid.db")
+	PollSQLiteDBPath       = lookupEnv("POLL_SQLITE_DB_PATH", "poller.db")
+	ActivitySQLiteDBPath   = lookupEnv("ACTIVITY_SQLITE_DB_PATH", "activity.db")
+	RaidSQLiteDBPath       = lookupEnv("RAID_SQLITE_DB_PATH", "raid.db")
+	LevelTrackerSQLitePath = lookupEnv("LEVEL_TRACKER_SQLITE_PATH", "leveltracking.db")
 )
 
 func lookupEnv(key string, def string) string {

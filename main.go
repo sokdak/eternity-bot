@@ -131,12 +131,12 @@ func main() {
 			}
 		case <-midTermTicker.C:
 			err := handler.UpdateMessageWithRoles(dg,
-				environment.DiscordGuildInfoChannelID, environment.DiscordGuildInfoByRoleMessageID)
+				environment.DiscordGuildInfoChannelID, []string{environment.DiscordGuildInfoByRoleMessageID, environment.DiscordGuildInfoByRoleMessageID2})
 			if err != nil {
 				fmt.Println("Error updating message with roles:", err)
 			}
 			err = handler.UpdateMessagesWithLevels(dg,
-				environment.DiscordGuildInfoChannelID, environment.DiscordGuildInfoByLevelMessageID)
+				environment.DiscordGuildInfoChannelID, []string{environment.DiscordGuildInfoByLevelMessageID, environment.DiscordGuildInfoByLevelMessageID2})
 			if err != nil {
 				fmt.Println("Error updating messages with levels:", err)
 			}

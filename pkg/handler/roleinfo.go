@@ -33,7 +33,7 @@ var mainRoleList = map[string][]string{
 	},
 }
 
-func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) error {
+func UpdateMessageWithRoles(s *discordgo.Session, channelID string, messageIDs []string) error {
 	members := cache.ListAllMembers()
 
 	var ms []model.MemberInfo
@@ -119,12 +119,12 @@ func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) e
 			currentMainRole = mk.MainRoleName
 			currentSubRole = mk.SubRoleName
 
-			sb.WriteString(fmt.Sprintf("\n**%s** (%d / 평%.1f)\n", mk.MainRoleName, mainroleCount[mk.MainRoleName], mainroleAverageLevel[mk.MainRoleName]))
-			sb.WriteString(fmt.Sprintf("- **%s** (%d / 평%.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
+			sb.WriteString(fmt.Sprintf("\n**%s** (%d / 평균 %.1f)\n", mk.MainRoleName, mainroleCount[mk.MainRoleName], mainroleAverageLevel[mk.MainRoleName]))
+			sb.WriteString(fmt.Sprintf("- **%s** (%d / 평균 %.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
 			sb.WriteString(mk.Mention + " ")
 		} else if currentSubRole != mk.SubRoleName {
 			currentSubRole = mk.SubRoleName
-			sb.WriteString(fmt.Sprintf("\n- **%s** (%d / 평%.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
+			sb.WriteString(fmt.Sprintf("\n- **%s** (%d / 평균 %.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
 			sb.WriteString(mk.Mention + " ")
 		} else {
 			sb.WriteString(mk.Mention + " ")
@@ -134,15 +134,45 @@ func UpdateMessageWithRoles(s *discordgo.Session, channelID, messageID string) e
 
 	sb.WriteString(fmt.Sprintf("\n\n**[총 인원: %d명]**\n", memberCount))
 
-	_, err := s.ChannelMessageEdit(channelID, messageID, sb.String())
-	if err != nil {
-		return fmt.Errorf("failed to edit message: %w", err)
+	// split the message by carriage return if it exceeds 2000 characters
+	if sb.Len() > 2000 {
+		// find last carriage return before 2000 characters
+		lastCR := strings.LastIndex(sb.String()[:2000], "\n")
+		if lastCR == -1 {
+			lastCR = 2000 // if no carriage return, split at 2000 characters
+		}
+
+		// split the message
+		firstPart := sb.String()[:lastCR]
+		secondPart := sb.String()[lastCR:]
+
+		// edit the first message
+		if len(messageIDs) > 1 {
+			_, err := s.ChannelMessageEdit(channelID, messageIDs[0], firstPart)
+			if err != nil {
+				return fmt.Errorf("failed to edit first message: %w", err)
+			}
+
+			_, err = s.ChannelMessageEdit(channelID, messageIDs[1], secondPart)
+			if err != nil {
+				return fmt.Errorf("failed to edit second message: %w", err)
+			}
+		} else {
+			// return error if no message IDs are provided
+			return fmt.Errorf("no message IDs provided")
+		}
+	} else {
+		// edit the message
+		_, err := s.ChannelMessageEdit(channelID, messageIDs[0], sb.String())
+		if err != nil {
+			return fmt.Errorf("failed to edit message: %w", err)
+		}
 	}
 
 	return nil
 }
 
-func UpdateMessagesWithLevels(s *discordgo.Session, channelID, messageID string) error {
+func UpdateMessagesWithLevels(s *discordgo.Session, channelID string, messageIDs []string) error {
 	members := cache.ListAllMembers()
 
 	var ms []model.MemberInfo
@@ -201,9 +231,39 @@ func UpdateMessagesWithLevels(s *discordgo.Session, channelID, messageID string)
 	}
 	sb.WriteString(fmt.Sprintf("\n**[평균 레벨: %.1f, 중앙값 레벨: %d]**\n", avgLevel, medianLevel))
 
-	_, err := s.ChannelMessageEdit(channelID, messageID, sb.String())
-	if err != nil {
-		return fmt.Errorf("failed to edit message: %w", err)
+	// split the message by carriage return if it exceeds 2000 characters
+	if sb.Len() > 2000 {
+		// find last carriage return before 2000 characters
+		lastCR := strings.LastIndex(sb.String()[:2000], "\n")
+		if lastCR == -1 {
+			lastCR = 2000 // if no carriage return, split at 2000 characters
+		}
+
+		// split the message
+		firstPart := sb.String()[:lastCR]
+		secondPart := sb.String()[lastCR:]
+
+		// edit the first message
+		if len(messageIDs) > 1 {
+			_, err := s.ChannelMessageEdit(channelID, messageIDs[0], firstPart)
+			if err != nil {
+				return fmt.Errorf("failed to edit first message: %w", err)
+			}
+
+			_, err = s.ChannelMessageEdit(channelID, messageIDs[1], secondPart)
+			if err != nil {
+				return fmt.Errorf("failed to edit second message: %w", err)
+			}
+		} else {
+			// return error if no message IDs are provided
+			return fmt.Errorf("no message IDs provided")
+		}
+	} else {
+		// edit the message
+		_, err := s.ChannelMessageEdit(channelID, messageIDs[0], sb.String())
+		if err != nil {
+			return fmt.Errorf("failed to edit message: %w", err)
+		}
 	}
 
 	return nil
