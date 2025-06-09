@@ -119,12 +119,12 @@ func UpdateMessageWithRoles(s *discordgo.Session, channelID string, messageIDs [
 			currentMainRole = mk.MainRoleName
 			currentSubRole = mk.SubRoleName
 
-			sb.WriteString(fmt.Sprintf("\n**%s** (%d / 평균 %.1f)\n", mk.MainRoleName, mainroleCount[mk.MainRoleName], mainroleAverageLevel[mk.MainRoleName]))
-			sb.WriteString(fmt.Sprintf("- **%s** (%d / 평균 %.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
+			sb.WriteString(fmt.Sprintf("\n**%s** (%d명 / 평균 %.1f)\n", mk.MainRoleName, mainroleCount[mk.MainRoleName], mainroleAverageLevel[mk.MainRoleName]))
+			sb.WriteString(fmt.Sprintf("- **%s** (%d명 / 평균 %.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
 			sb.WriteString(mk.Mention + " ")
 		} else if currentSubRole != mk.SubRoleName {
 			currentSubRole = mk.SubRoleName
-			sb.WriteString(fmt.Sprintf("\n- **%s** (%d / 평균 %.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
+			sb.WriteString(fmt.Sprintf("\n- **%s** (%d명 / 평균 %.1f): ", mk.SubRoleName, subroleCount[mk.MainRoleName][mk.SubRoleName], subroleAverageLevel[mk.MainRoleName][mk.SubRoleName]))
 			sb.WriteString(mk.Mention + " ")
 		} else {
 			sb.WriteString(mk.Mention + " ")
